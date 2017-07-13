@@ -23,28 +23,33 @@ case class FoodSource(id: Int, location: Point,
   extends FoodLike {
 
   import FoodSource._
+  import geometry.CircularBiologicalRestrictedShape._
+
   if (!environment.within(location))
     throw new IllegalArgumentException(s"$this spawned outside of environment")
   override val center: Point = location
 
-  override def react(event: MouseEvent): (Boolean, Option[Environment]) = {
-    if (super.react(event)._1 && event.getEventType == MouseEvent.MOUSE_CLICKED) {
-      log(s"Mouse Click on food source ID $id," +
-          s" click location: (${event.getSceneX},${event.getSceneY})," +
-          s" element location: ($location)," +
-          s" element: $this")
-      if (event.getButton == MouseButton.SECONDARY) {
-        log(s"Secondary click, removing food source id $id")
-        (true, Some(environment.copy(foodSources =
-                                       environment.foodSources.filterNot(_ == this),
-                                     statistics =
-                                       environment.statistics.copy(_consumedFoodSources =
-                                                                     environment.statistics.consumedFoodSources + 1))))
-      } else (true, Some(environment))
-    }
-    else (false, None)
-  }
+  override def react(event: MouseEvent): Reaction = {
+    if (super.react(event)._1) {
+      event.getEventType match {
+        case click if click == MouseEvent.MOUSE_CLICKED =>
+          log(s"Mouse Click on food source ID $id," +
+              s" click location: (${event.getSceneX},${event.getSceneY})," +
+              s" element location: ($location)," +
+              s" element: $this")
+          if (event.getButton == MouseButton.SECONDARY) {
+            log(s"Secondary click, removing food source id $id")
+            (true, Some(environment.copy(foodSources =
+                                           environment.foodSources.filterNot(_ == this),
+                                         statistics =
+                                           environment.statistics.copy(_consumedFoodSources =
+                                                                         environment.statistics.consumedFoodSources + 1))))
 
+          } else defaultPositiveReaction
+        case _ => defaultNegativeReaction
+      }
+    } else defaultNegativeReaction
+  }
 
   override def toString: String =
     s"${getClass.getSimpleName}[" +

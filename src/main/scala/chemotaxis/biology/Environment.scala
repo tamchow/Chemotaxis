@@ -30,6 +30,7 @@ case class Environment(width: Double, height: Double, center: Point,
   extends CircularBiologicalRestrictedShape {
 
   import Environment._
+
   def initializedWith(foodSources: Seq[FoodSource], bacteria: Seq[Bacterium]): Environment = {
     val finalizedEnvironment = copy(bacteria = bacteria,
                                     foodSources = foodSources,
@@ -43,7 +44,9 @@ case class Environment(width: Double, height: Double, center: Point,
                       bacteriaSpawner: Environment => Seq[Bacterium]): Environment =
     initializedWith(foodSourceSpawner(this), bacteriaSpawner(this))
 
-  override def react(event: MouseEvent): (Boolean, Option[Environment]) = {
+  import CircularBiologicalRestrictedShape._
+
+  override def react(event: MouseEvent): Reaction = {
     val withinBounds = super.react(event)
     if (withinBounds._1) {
       // Bacteria get priority as they move over food sources, not vice-versa
@@ -61,19 +64,23 @@ case class Environment(width: Double, height: Double, center: Point,
                             Collisions.circleContainsPoint(forgivingBoundsOfClosestElement, (event.getSceneX, event.getSceneY)))
                           closestElement.react(event)
                         else directlyHandled
-          if (!handled._1 && event.getEventType == MouseEvent.MOUSE_CLICKED) {
-            println(s"Untargeted Mouse Click event at (${event.getSceneX},${event.getSceneY}), closest element: $closestElement")
-            val newEnvironment =
-              if (event.getButton == MouseButton.PRIMARY) {
-                println("Primary mouse click, spawning food source")
-                environmentWithNewFoodSourceSpawnedAt(event.getSceneX, event.getSceneY)
-              } else if (event.getButton == MouseButton.SECONDARY) {
-                println("Secondary mouse click, spawning bacterium")
-                environmentWithNewBacteriumSpawnedAt(event.getSceneX, event.getSceneY)
-              } else this
-            (true, Some(newEnvironment))
+          if (!handled._1) {
+            event.getEventType match {
+              case click if click == MouseEvent.MOUSE_CLICKED =>
+                log(s"Untargeted Mouse Click event at (${event.getSceneX},${event.getSceneY}), closest element: $closestElement")
+                val newEnvironment =
+                  if (event.getButton == MouseButton.PRIMARY) {
+                    log("Primary mouse click, spawning food source")
+                    environmentWithNewFoodSourceSpawnedAt(event.getSceneX, event.getSceneY)
+                  } else if (event.getButton == MouseButton.SECONDARY) {
+                    log("Secondary mouse click, spawning bacterium")
+                    environmentWithNewBacteriumSpawnedAt(event.getSceneX, event.getSceneY)
+                  } else this
+                (true, Some(newEnvironment))
+              case _ => handled
+            }
           } else handled
-        case Failure(_) => (false, None)
+        case Failure(_) => defaultNegativeReaction
       }
     } else withinBounds
   }
@@ -186,27 +193,27 @@ case class Environment(width: Double, height: Double, center: Point,
         newStatistics.copy(_deadBacteria = newStatistics.deadBacteria + killedBacteria,
                            _spawnedBacteria = newStatistics.spawnedBacteria + spawnedBacteria)
       currentEnvironment = newEnvironment.copy(allFoodSources = newEnvironment._allFoodSources,
-                                    statistics = modifiedStatistics)
+                                               statistics = modifiedStatistics)
       distinctNewBacteria
     }).flatten
     val liveBacteria = newBacteria.filter(_.isDefined).map(_.get)
     val realLiveBacteria = liveBacteria.filter(Bacterium.isAlive)
     currentEnvironment.copy(bacteria = realLiveBacteria,
-                 allBacteria = currentEnvironment._allBacteria ++ liveBacteria,
-                 // We note that the viscosity of the agar increases as it solidifies due to evaporation of moisture,
-                 // and it settling down due to gravity.
-                 parameters = currentEnvironment.parameters
-                   .copy(mediumViscosity =
-                           currentEnvironment.viscosity + currentEnvironment.viscosityIncrement),
-                 statistics = currentEnvironment.statistics
-                   .copy(locationHistory = currentEnvironment.locationHistoryUpdated,
-                         _deadBacteria =
-                           currentEnvironment.statistics.deadBacteria + (liveBacteria.length - realLiveBacteria.length),
-                         _geneticallyUniqueBacteria = liveBacteria.distinctBy(_.responseCoefficient).length,
-                         _stoppedBacteria = liveBacteria.count(_.stopped),
-                         _maxGeneration =
-                           Try(liveBacteria.maxBy(_.generation)).map(_.generation)
-                             .getOrElse(currentEnvironment.statistics.maxGeneration)))
+                            allBacteria = currentEnvironment._allBacteria ++ liveBacteria,
+                            // We note that the viscosity of the agar increases as it solidifies due to evaporation of moisture,
+                            // and it settling down due to gravity.
+                            parameters = currentEnvironment.parameters
+                              .copy(mediumViscosity =
+                                      currentEnvironment.viscosity + currentEnvironment.viscosityIncrement),
+                            statistics = currentEnvironment.statistics
+                              .copy(locationHistory = currentEnvironment.locationHistoryUpdated,
+                                    _deadBacteria =
+                                      currentEnvironment.statistics.deadBacteria + (liveBacteria.length - realLiveBacteria.length),
+                                    _geneticallyUniqueBacteria = liveBacteria.distinctBy(_.responseCoefficient).length,
+                                    _stoppedBacteria = liveBacteria.count(_.stopped),
+                                    _maxGeneration =
+                                      Try(liveBacteria.maxBy(_.generation)).map(_.generation)
+                                        .getOrElse(currentEnvironment.statistics.maxGeneration)))
       .copy(foodSources = currentEnvironment.foodSources.map(_.copy(environment = currentEnvironment)))
   }
 
@@ -276,7 +283,7 @@ case class Environment(width: Double, height: Double, center: Point,
     //draw contents
     foodSources foreach (_ draw canvas)
     drawTrails(graphics)
-    //println("Drawing bacteria")
+    //log("Drawing bacteria")
     //bacteria foreach (bacterium => log(bacterium.toString))
     bacteria foreach (_ draw canvas)
     //draw wall of plate

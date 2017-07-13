@@ -32,22 +32,25 @@ case class Bacterium(id: Int, location: Point,
   extends FoodLike {
 
   import Bacterium._
+  import geometry.CircularBiologicalRestrictedShape._
 
-  override def react(event: MouseEvent): (Boolean, Option[Environment]) = {
-    if (super.react(event)._1 && event.getEventType == MouseEvent.MOUSE_CLICKED) {
-      log(s"Mouse Click on bacterium ID $id," +
-          s" click location: (${event.getSceneX},${event.getSceneY})," +
-          s" element location: ($location)," +
-          s" element: $this")
-      if (event.getButton == MouseButton.SECONDARY) {
-        log(s"Secondary click, removing bacterium id $id")
-        (true, Some(environment.copy(bacteria =
-                                       environment.bacteria.filterNot(_ == this),
-                                     statistics =
-                                       environment.statistics.copy(_deadBacteria =
-                                                                     environment.statistics.deadBacteria + 1))))
-      } else (true, Some(environment))
-    } else (false, None)
+  override def react(event: MouseEvent): Reaction = {
+    if (super.react(event)._1) {
+      event.getEventType match {
+        case click if click == MouseEvent.MOUSE_CLICKED =>
+          log(s"Mouse Click on bacterium ID $id, click location: (${event.getSceneX}},${event.getSceneY}}), element location: ($location), element: $this")
+          if (event.getButton == MouseButton.SECONDARY) {
+            log(s"Secondary click, removing bacterium id $id")
+            (true, Some(environment.copy(bacteria =
+                                           environment.bacteria.filterNot(_ == this),
+                                         statistics =
+                                           environment.statistics.copy(_deadBacteria =
+                                                                         environment.statistics.deadBacteria + 1))))
+
+          } else defaultPositiveReaction
+        case _ => defaultNegativeReaction
+      }
+    } else defaultNegativeReaction
   }
 
   if (!environment.within(location))

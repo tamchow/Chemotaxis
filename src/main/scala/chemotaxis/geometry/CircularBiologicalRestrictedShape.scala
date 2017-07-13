@@ -12,6 +12,8 @@ import chemotaxis.extensions.Extensions._
 abstract class CircularBiologicalRestrictedShape extends RestrictedShape {
   override type T = Circle
 
+  import CircularBiologicalRestrictedShape._
+
   override def within(point: Point): Boolean =
     Collisions.circleContainsPoint(shape, point)
 
@@ -28,8 +30,13 @@ abstract class CircularBiologicalRestrictedShape extends RestrictedShape {
 
   def center: Point
 
-  def react(event: MouseEvent): (Boolean, Option[Environment]) =
+  def react(event: MouseEvent): Reaction =
     (within(event.getSceneX, event.getSceneY), None)
 
   override def overlaps(that: Shape): Boolean = Collisions.circleContainsShape(shape, that)
+}
+
+object CircularBiologicalRestrictedShape {
+  type Reaction = (Boolean, Option[Environment])
+  val defaultNegativeReaction: Reaction = (false, None)
 }
