@@ -3,11 +3,11 @@ package chemotaxis.geometry
 import javafx.scene.input.MouseEvent
 import javafx.scene.shape.{Circle, Shape}
 
-import chemotaxis.biology.{FoodSource, Plate}
+import chemotaxis.biology.{FoodSource, Environment}
 import chemotaxis.extensions.Extensions._
 
 /**
-  * Abstracts out common functionality between [[FoodSource]] and [[Plate]] as both are [[RestrictedShape]]s of [[javafx.scene.shape.Circle]]s
+  * Abstracts out common functionality between [[FoodSource]] and [[Environment]] as both are [[RestrictedShape]]s of [[javafx.scene.shape.Circle]]s
   */
 abstract class CircularBiologicalRestrictedShape extends RestrictedShape {
   override type T = Circle
@@ -24,10 +24,12 @@ abstract class CircularBiologicalRestrictedShape extends RestrictedShape {
       case _ => false
     })
 
+  def toSerializableString: String = ??? //TODO: Implement serialization support
+
   def center: Point
 
-  def react(event: MouseEvent): Boolean =
-    within(event.getSceneX, event.getSceneY)
+  def react(event: MouseEvent): (Boolean, Option[Environment]) =
+    (within(event.getSceneX, event.getSceneY), None)
 
   override def overlaps(that: Shape): Boolean = Collisions.circleContainsShape(shape, that)
 }

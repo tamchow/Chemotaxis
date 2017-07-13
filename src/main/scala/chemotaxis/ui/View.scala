@@ -18,7 +18,7 @@ import javafx.scene.text.Font
 import javafx.stage.{FileChooser, Stage}
 import javax.imageio.ImageIO
 
-import chemotaxis.biology.{Bacterium, FoodSource, Plate}
+import chemotaxis.biology.{Bacterium, FoodSource, Environment}
 import chemotaxis.extensions.Extensions.{BuilderStyle, RicherString}
 import chemotaxis.extensions.MathUtilities._
 
@@ -39,7 +39,7 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
   private val stage: Stage = providedStage
   private val sceneSize = new Dimension2D(stage.getWidth, stage.getHeight)
   private val canvas = new Canvas(sceneSize.getWidth, (sceneSize.getHeight * canvasSizeFraction).toInt)
-  private var plate: Plate = Plate.createBarePlate(canvas.getWidth, canvas.getHeight)
+  private var current: Environment = Environment.createBare(canvas.getWidth, canvas.getHeight)
   private var _fps: Double = clampNonNegative(providedFPS)
   private var _frames = 0
 
@@ -55,17 +55,17 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
     * We use a rewind-overwrites-history approach here instead of something like timeline branching
     * because branching becomes prohibitively CPU-and-memory intensive in conjunction with the rewind functionality implemented in [[Main]]
     */
-  private val plateHistory = new ArrayBuffer[Plate](estimatedMaxFrames)
+  private val history = new ArrayBuffer[Environment](estimatedMaxFrames)
 
-  private val plateHistoryInfo = newIdentityHashSet[Plate]()
+  private val historyIndex = newIdentityHashSet[Environment]()
 
   /**
     * @param foodSourcesSpawnCount The number of food sources to spawn, if available
     * @param bacteriaSpawnCount    The number of bacteria to spawn, if available
     */
   def initializeState(foodSourcesSpawnCount: Option[Int] = None, bacteriaSpawnCount: Option[Int] = None): Unit = {
-    plate = plate.initializedWith(FoodSource.spawnRandomFoodSources(foodSourcesSpawnCount.getOrElse(random.nextInt(5) + (if (random.nextBoolean()) 1 else 0)), _),
-                                  Bacterium.spawnRandomBacteria(bacteriaSpawnCount.getOrElse(random.nextInt(50) + 1), _))
+    current = current.initializedWith(FoodSource.spawnRandomFoodSources(foodSourcesSpawnCount.getOrElse(rng.nextInt(5) + (if (rng.nextBoolean()) 1 else 0)), _),
+                                  Bacterium.spawnRandomBacteria(bacteriaSpawnCount.getOrElse(rng.nextInt(50) + 1), _))
   }
 
   def initializeDisplay: (Dimension2D, GridPane) = {
@@ -82,7 +82,6 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
     canvasBox.setFillWidth(true)
     rootPane.setStyle(/*Stainless Steel*/ "-fx-background:#d8d8d8;")
     canvas.setBlendMode(BlendMode.SRC_ATOP)
-    canvas.addEventHandler(MouseEvent.ANY, (event: MouseEvent) => if (event.getPickResult.toString.contains("Canvas")) plate.react(event))
     canvasBox.getChildren.add(canvas)
     statusLabel.setFont(font)
     val statusBox = new VBox()
@@ -112,23 +111,27 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
   }
 
   def goToFrame(index: Int): Unit = {
-    if (index < 1 || index > plateHistory.length)
-      throw new IllegalArgumentException(s"Index $index out of bounds, should be in [1, ${plateHistory.length}]")
+    if (index < 1 || index > history.length)
+      throw new IllegalArgumentException(s"Index $index out of bounds, should be in [1, ${
+        history.length
+      }]")
     val directIndex = index - 1
-    plate = plateHistory(directIndex)
-    if (frames == plateHistory.length)
-      plateHistory.remove(directIndex)
+    current = history(directIndex)
+    if (frames == history.length)
+      history.remove(directIndex)
     _frames = index
   }
 
   def saveState(): Unit = {
+
     import java.time._
+
     new Thread(() => {
       val sessionSaveFileName = LocalDateTime.now.format((new format.DateTimeFormatterBuilder)
                                                            .appendPattern("HH-mm-ss_dd-LL-yyyy_")
                                                            .toFormatter) + baseSessionDBName
       Files.write(cwdPath.resolve(sessionSaveFileName),
-                  (Seq(s"$frames", s"$fps") ++ plateHistory.map(_.toSerializableString)).asJava)
+                  (Seq(s"$frames", s"$fps") ++ history.map(_.toSerializableString)).asJava)
     }).start()
   }
 
@@ -137,13 +140,13 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
                                             createExtensionFilterList(sessionDatabaseExtensionInfo))(stage, baseSessionDBName)
     val data = Files.readAllLines(restoreFile).asScala
     fps = data(1).toDouble
-    plateHistoryInfo.clear()
-    plateHistory.clear()
-    plateHistory.sizeHint(data.length - 2)
-    plateHistory ++ data.drop(2).map(Plate.fromSerializableString)
-    plateHistoryInfo.sizeHint(plateHistory.length)
-    plateHistoryInfo ++= plateHistory
-    _frames = clamp(0, plateHistory.length)(data.head.toInt)
+    historyIndex.clear()
+    history.clear()
+    history.sizeHint(data.length - 2)
+    history ++ data.drop(2).map(Environment.fromSerializableString)
+    historyIndex.sizeHint(history.length)
+    historyIndex ++= history
+    _frames = clamp(0, history.length)(data.head.toInt)
     simulationRunner(stage)
   }
 
@@ -158,31 +161,30 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
         val frameTime = 1.0 / fps
         if (now - lastUpdate >= (frameTime * 1E9).toLong) {
           canvas.getGraphicsContext2D.clearRect(0, 0, stage.getWidth, stage.getHeight)
-          val plateStatistics = plate.plateStatistics
+          val plateStatistics = current.statistics
+
           import plateStatistics._
+
           val fpsText = s"FPS: (real = " +
                         s"${"%.2f".format(1E9 / (now - lastUpdate))}, " +
                         s"ideal = $fps), " +
-                        s"frame $frames (of ${plateHistory.length} total)"
+                        s"frame $frames (of ${history.length} total)"
           val spawnText = s"$spawnedBacteria " +
                           s"bacteri${if (spawnedBacteria != 1) "a" else "um"} & " +
-                          s"$spawnedFoodSources food source${
-                            if (spawnedFoodSources != 1) "s" else ""
-                          } were spawned"
+                          s"$spawnedFoodSources food source${if (spawnedFoodSources != 1) "s" else ""} were spawned"
           statusLabel.setText(spawnText +
                               s", $fpsText\n$deadBacteria " +
-                              s"bacteri${if (deadBacteria != 1) "a have" else "um has"}" +
-                              s" died of hunger" +
+                              s"bacteri${if (deadBacteria != 1) "a have" else "um has"} died" +
                               s", ${if (allFoodSourcesConsumed_?) "all" else s"$consumedFoodSources"} " +
                               s"food source${if (allFoodSourcesConsumed_? || consumedFoodSources != 1) "s have" else " has"} been consumed." +
-                              s"\nGenetically Unique Bacteria = $geneticallyUniqueBacteria.")
-          plate draw canvas
-          if (!plateHistoryInfo(plate)) {
-            if (plateHistory.length <= frames)
-              plateHistory.append(plate)
+                              s"\nGenetically Unique Bacteria = $geneticallyUniqueBacteria, Max Living Generation = $maxGeneration.")
+          current draw canvas
+          if (!historyIndex(current)) {
+            if (history.length <= frames)
+              history.append(current)
             else
-              plateHistory(frames) = plate
-            plateHistoryInfo += plate
+              history(frames) = current
+            historyIndex += current
           }
           // Don't pause the animation, continue updating it while the notification dialog is showing.
           //noinspection ScalaUnnecessaryParentheses
@@ -198,7 +200,7 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
           //            stoppedDialogShowing_? = true
           //          }
           else {
-            plate = plate.updated(frameTime)
+            current = current.updated(frameTime).selfConsistent
             lastUpdate = now
           }
           _frames += 1
@@ -206,12 +208,20 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
       }
     }
     changeIndexButton.addEventHandler(ActionEvent.ACTION, (_: ActionEvent) => {
+      canvas.requestFocus()
       val text = indexInput.getText.trim
       if (!text.isEmpty) {
         goToFrame(text.toInt)
         animationTimer.handle(System.nanoTime())
       }
     })
+    canvas.addEventHandler(MouseEvent.ANY, (event: MouseEvent) =>
+      if (event.getPickResult.toString.contains("Canvas")) {
+        val (reaction, possiblyNewPlate) = current.react(event)
+        if (reaction) {
+          current = possiblyNewPlate.getOrElse(current).selfConsistent
+        }
+      })
     animationTimer
   }
 
@@ -228,7 +238,9 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
   }
 
   private def createExtensionFilterList(extensionFilterInfo: Seq[(String, String)]): Seq[FileChooser.ExtensionFilter] =
-    extensionFilterInfo.map { case (name, extension) => new FileChooser.ExtensionFilter(name, extension) }
+    extensionFilterInfo.map {
+                              case (name, extension) => new FileChooser.ExtensionFilter(name, extension)
+                            }
 
   import BuilderStyle._
 
@@ -287,8 +299,10 @@ object View {
   private def newIdentityHashSet[E](): collection.mutable.Set[E] =
     util.Collections.newSetFromMap(new util.IdentityHashMap[E, java.lang.Boolean]()).asScala
 
+  def log(message: String): Unit = println(message)
+
   //noinspection TypeAnnotation
-  lazy val random = new java.security.SecureRandom()
+  lazy val rng = new java.security.SecureRandom()
 
   lazy val snapshotParameters: SnapshotParameters =
   //@formatter:off

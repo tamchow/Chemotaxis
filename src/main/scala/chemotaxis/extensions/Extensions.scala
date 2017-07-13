@@ -345,6 +345,9 @@ object MathUtilities {
     val MinValue = Double.MinValue
   }
 
+  @inline def verify(valueToCheck: => Double, default: => Double): Double =
+    if (valueToCheck.isNaN || valueToCheck.isInfinite) default else valueToCheck
+
   @inline def clamp[T](min: T, max: T)(value: T)
                       (implicit toOrdered: T => Ordered[T]): T =
     if (value < min) min
