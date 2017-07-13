@@ -25,14 +25,19 @@ _Implemented_:
 6. <kbd> s</kbd> to save snapshot
 7. <kbd> F5</kbd> to start new simulation
 8. <kbd>Backspace</kbd> to rewind
+9. Right-click on empty plate region to spawn new bacterium there
+10. Left-click on empty plate region to spawn new food source there
+11. Right-click on bacterium to kill it
+12. Left-click on food source to remove it
+13. General history navigation via the `"Go To"` controls.
 
 _Unimplemented:_
-9. <kbd>F2</kbd> to save session state
-10. <kbd>F3</kbd> to restore session state
+14. <kbd>F2</kbd> to save session state
+15. <kbd>F3</kbd> to restore session state
 
 ##Requirements
 
-1. Scala 2.12.1 (2.11+ should work)
+1. Scala 2.12.x (2.11+ should work)
 2. Java 8 Update 121 + JavaFX (Oracle JDK on Linux) (Java 8 Update 40+ should work)
 3. A powerful PC ;)
 
