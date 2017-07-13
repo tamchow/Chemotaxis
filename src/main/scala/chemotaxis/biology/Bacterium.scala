@@ -659,7 +659,7 @@ object Bacterium extends UIProxy[Bacterium] {
                                                   * hence this is disabled by default.
                                                  * If there is good reason for enabling this, only then enable it, otherwise leave it as-is
                                                  */
-                                                 cannibal_? = true)
+                                                 cannibal_? = false)
     Bacterium(id, location,
               size, initialAngle, initialSpeed,
               Defaults.initialHunger, standardParameters, environment)
