@@ -217,9 +217,9 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
     })
     canvas.addEventHandler(MouseEvent.ANY, (event: MouseEvent) =>
       if (event.getPickResult.toString.contains("Canvas")) {
-        val (reaction, possiblyNewPlate) = current.react(event)
-        if (reaction) {
-          current = possiblyNewPlate.getOrElse(current).selfConsistent
+        current.react(event) match {
+          case Some(newPlate) => current = newPlate.selfConsistent
+          case None => ()
         }
       })
     animationTimer
@@ -279,6 +279,8 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
 }
 
 object View {
+  val loggingEnabled: Boolean = true
+
   private val fontSize = 18
   private lazy val font = Font.font(fontSize)
   private val (indexInputPrompt, indexerButtonText) = ("Go to Frame Number", "Go to")

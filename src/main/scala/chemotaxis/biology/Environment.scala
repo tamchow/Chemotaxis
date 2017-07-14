@@ -31,6 +31,8 @@ case class Environment(width: Double, height: Double, center: Point,
 
   import Environment._
 
+  override val environment: Environment = this
+
   def initializedWith(foodSources: Seq[FoodSource], bacteria: Seq[Bacterium]): Environment = {
     val finalizedEnvironment = copy(bacteria = bacteria,
                                     foodSources = foodSources,
@@ -46,44 +48,45 @@ case class Environment(width: Double, height: Double, center: Point,
 
   import CircularBiologicalRestrictedShape._
 
-  override def react(event: MouseEvent): Reaction = {
-    val withinBounds = super.react(event)
-    if (withinBounds._1) {
-      // Bacteria get priority as they move over food sources, not vice-versa
-      val elements = bacteria ++ foodSources
-      val possiblyClosestElement = Try(elements.minBy(_.center.distance(event.getSceneX, event.getSceneY)))
-      possiblyClosestElement match {
-        case Success(closestElement) =>
-          val allowedDeviation = diameter * ScreenEpsilon
-          val closestElementShape = closestElement.shape
-          val forgivingBoundsOfClosestElement = new Circle(closestElementShape.getCenterX,
-                                                           closestElementShape.getCenterX,
-                                                           closestElementShape.getRadius + allowedDeviation)
-          val directlyHandled = elements.foldLeft[(Boolean, Option[Environment])]((false, None))((acc, element) => if (!acc._1) element.react(event) else acc)
-          val handled = if (!directlyHandled._1 &&
-                            Collisions.circleContainsPoint(forgivingBoundsOfClosestElement, (event.getSceneX, event.getSceneY)))
-                          closestElement.react(event)
-                        else directlyHandled
-          if (!handled._1) {
-            event.getEventType match {
-              case click if click == MouseEvent.MOUSE_CLICKED =>
-                log(s"Untargeted Mouse Click event at (${event.getSceneX},${event.getSceneY}), closest element: $closestElement")
-                val newEnvironment =
-                  if (event.getButton == MouseButton.PRIMARY) {
-                    log("Primary mouse click, spawning food source")
-                    environmentWithNewFoodSourceSpawnedAt(event.getSceneX, event.getSceneY)
-                  } else if (event.getButton == MouseButton.SECONDARY) {
-                    log("Secondary mouse click, spawning bacterium")
-                    environmentWithNewBacteriumSpawnedAt(event.getSceneX, event.getSceneY)
-                  } else this
-                (true, Some(newEnvironment))
-              case _ => handled
-            }
-          } else handled
-        case Failure(_) => defaultNegativeReaction
-      }
-    } else withinBounds
-  }
+  override def react(event: MouseEvent): Reaction =
+    super.react(event) match {
+      case Some(_) =>
+        // Bacteria get priority as they move over food sources, not vice-versa
+        val elements = bacteria ++ foodSources
+        val possiblyClosestElement = Try(elements.minBy(_.center.distance(event.getSceneX, event.getSceneY)))
+        possiblyClosestElement match {
+          case Success(closestElement) =>
+            val allowedDeviation = diameter * ScreenEpsilon
+            val closestElementShape = closestElement.shape
+            val forgivingBoundsOfClosestElement = new Circle(closestElementShape.getCenterX,
+                                                             closestElementShape.getCenterX,
+                                                             closestElementShape.getRadius + allowedDeviation)
+            val directlyHandled = elements.foldLeft(defaultNegativeReaction)((acc, element) => if (acc.isDefined) acc else element.react(event))
+            val handled = if (directlyHandled.isEmpty &&
+                              Collisions.circleContainsPoint(forgivingBoundsOfClosestElement, (event.getSceneX, event.getSceneY)))
+                            closestElement.react(event)
+                          else directlyHandled
+            if (handled.isEmpty) {
+              event.getEventType match {
+                case click if click == MouseEvent.MOUSE_CLICKED =>
+                  log(s"Untargeted Mouse Click event at (${event.getSceneX},${event.getSceneY}), closest element: $closestElement")
+                  val newEnvironment =
+                    if (event.getButton == MouseButton.PRIMARY) {
+                      log("Primary mouse click, spawning food source")
+                      environmentWithNewFoodSourceSpawnedAt(event.getSceneX, event.getSceneY)
+                    } else if (event.getButton == MouseButton.SECONDARY) {
+                      log("Secondary mouse click, spawning bacterium")
+                      environmentWithNewBacteriumSpawnedAt(event.getSceneX, event.getSceneY)
+                    } else this
+                  Some(newEnvironment)
+                case _ => handled
+              }
+            } else handled
+          case Failure(_) => defaultNegativeReaction
+        }
+      case None => defaultNegativeReaction
+    }
+
 
   if (width <= 0 || height <= 0)
     throw new IllegalArgumentException(s"Cannot create environment of invalid size: width = $width, height = $height")
@@ -182,7 +185,7 @@ case class Environment(width: Double, height: Double, center: Point,
     var currentEnvironment = copy()
     //log("Updating state")
     val newBacteria = (for (bacterium <- bacteria) yield {
-      // log(bacterium.toString)
+      //log(bacterium)
       val (newEnvironment, newTemporaryBacteria) =
         bacterium.copy(environment = currentEnvironment).move(time)
       val distinctNewBacteria = newTemporaryBacteria.distinct
@@ -196,7 +199,9 @@ case class Environment(width: Double, height: Double, center: Point,
                                                statistics = modifiedStatistics)
       distinctNewBacteria
     }).flatten
-    val liveBacteria = newBacteria.filter(_.isDefined).map(_.get)
+    //@formatter:off
+    val liveBacteria = newBacteria.collect { case Some(bacterium) => bacterium }
+    //@formatter:on
     val realLiveBacteria = liveBacteria.filter(Bacterium.isAlive)
     currentEnvironment.copy(bacteria = realLiveBacteria,
                             allBacteria = currentEnvironment._allBacteria ++ liveBacteria,
@@ -248,7 +253,7 @@ case class Environment(width: Double, height: Double, center: Point,
     //log("Drawing trails")
     //noinspection ScalaUnusedSymbol
     for ((individual, individualHistory) <- statistics.locationHistory) {
-      //log(individual.toString)
+      //log(individual)
       val segments =
         individualHistory
           .map(_.location)
@@ -284,7 +289,7 @@ case class Environment(width: Double, height: Double, center: Point,
     foodSources foreach (_ draw canvas)
     drawTrails(graphics)
     //log("Drawing bacteria")
-    //bacteria foreach (bacterium => log(bacterium.toString))
+    //bacteria foreach log
     bacteria foreach (_ draw canvas)
     //draw wall of plate
     graphics.setStroke(Color.SILVER)

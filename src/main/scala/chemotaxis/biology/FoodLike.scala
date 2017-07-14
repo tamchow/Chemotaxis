@@ -13,14 +13,12 @@ import chemotaxis.geometry.CircularBiologicalRestrictedShape
 trait FoodLike extends CircularBiologicalRestrictedShape {
 
   import FoodLike._
-  import CircularBiologicalRestrictedShape._
 
   val id: Int
   val location: Point
   val amount: Double
   val toxicity: Double
   val maxAmount: Double
-  val environment: Environment
   val color: Option[Color]
 
   def defaultColor: Color
@@ -40,7 +38,7 @@ trait FoodLike extends CircularBiologicalRestrictedShape {
 
   override lazy val visibleColor: Color = color.getOrElse(defaultColor)
 
-  val defaultPositiveReaction: Reaction = (true, Some(environment))
+
   val scales: Scales = Scales()
   val viscosity: Double =
     clampNatural(verify(scales.viscosityScale, FoodSource.Defaults.viscosityScale)) *

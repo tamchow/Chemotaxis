@@ -30,8 +30,8 @@ case class FoodSource(id: Int, location: Point,
   override val center: Point = location
 
   override def react(event: MouseEvent): Reaction = {
-    if (super.react(event)._1) {
-      event.getEventType match {
+    super.react(event) match {
+      case Some(_) => event.getEventType match {
         case click if click == MouseEvent.MOUSE_CLICKED =>
           log(s"Mouse Click on food source ID $id," +
               s" click location: (${event.getSceneX},${event.getSceneY})," +
@@ -39,16 +39,17 @@ case class FoodSource(id: Int, location: Point,
               s" element: $this")
           if (event.getButton == MouseButton.SECONDARY) {
             log(s"Secondary click, removing food source id $id")
-            (true, Some(environment.copy(foodSources =
-                                           environment.foodSources.filterNot(_ == this),
-                                         statistics =
-                                           environment.statistics.copy(_consumedFoodSources =
-                                                                         environment.statistics.consumedFoodSources + 1))))
+            Some(environment.copy(foodSources =
+                                    environment.foodSources.filterNot(_ == this),
+                                  statistics =
+                                    environment.statistics.copy(_consumedFoodSources =
+                                                                  environment.statistics.consumedFoodSources + 1)))
 
           } else defaultPositiveReaction
         case _ => defaultNegativeReaction
       }
-    } else defaultNegativeReaction
+      case None => defaultNegativeReaction
+    }
   }
 
   override def toString: String =

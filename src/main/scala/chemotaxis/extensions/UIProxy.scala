@@ -8,10 +8,15 @@ import chemotaxis.ui
 trait UIProxy[T] {
   //noinspection TypeAnnotation
   val rng = ui.View.rng
-  // The lack of a type annotation is intentional -
+  // The lack of a type annotation above is intentional -
   // it allows changing the implementation without having to update the types everywhere.
 
-  def log(message: String): Unit = ui.View.log(message)
+  val loggingEnabled: Boolean = ui.View.loggingEnabled
+
+  def log(item: Any): Unit = log(item.toString)
+
+  def log(message: String): Unit =
+    if (loggingEnabled) ui.View.log(message) else ()
 
   def fromSerializableString(serializedString: String): T = ??? // TODO: Allow deserialization
 }

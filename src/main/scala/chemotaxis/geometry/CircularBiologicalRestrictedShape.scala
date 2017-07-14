@@ -30,13 +30,20 @@ abstract class CircularBiologicalRestrictedShape extends RestrictedShape {
 
   def center: Point
 
+  val environment: Environment
+
   def react(event: MouseEvent): Reaction =
-    (within(event.getSceneX, event.getSceneY), None)
+    if (within(event.getSceneX, event.getSceneY)) defaultPositiveReaction else defaultNegativeReaction
+
+  val defaultPositiveReaction: Reaction = Some(environment)
 
   override def overlaps(that: Shape): Boolean = Collisions.circleContainsShape(shape, that)
 }
 
 object CircularBiologicalRestrictedShape {
-  type Reaction = (Boolean, Option[Environment])
-  val defaultNegativeReaction: Reaction = (false, None)
+
+  type Reaction = Option[Environment]
+
+  val defaultNegativeReaction: Reaction =
+    None
 }

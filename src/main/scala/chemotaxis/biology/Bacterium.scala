@@ -34,24 +34,24 @@ case class Bacterium(id: Int, location: Point,
   import Bacterium._
   import geometry.CircularBiologicalRestrictedShape._
 
-  override def react(event: MouseEvent): Reaction = {
-    if (super.react(event)._1) {
-      event.getEventType match {
+  override def react(event: MouseEvent): Reaction =
+    super.react(event) match {
+      case Some(_) => event.getEventType match {
         case click if click == MouseEvent.MOUSE_CLICKED =>
           log(s"Mouse Click on bacterium ID $id, click location: (${event.getSceneX}},${event.getSceneY}}), element location: ($location), element: $this")
           if (event.getButton == MouseButton.SECONDARY) {
             log(s"Secondary click, removing bacterium id $id")
-            (true, Some(environment.copy(bacteria =
-                                           environment.bacteria.filterNot(_ == this),
-                                         statistics =
-                                           environment.statistics.copy(_deadBacteria =
-                                                                         environment.statistics.deadBacteria + 1))))
+            Some(environment.copy(bacteria =
+                                    environment.bacteria.filterNot(_ == this),
+                                  statistics =
+                                    environment.statistics.copy(_deadBacteria =
+                                                                  environment.statistics.deadBacteria + 1)))
 
           } else defaultPositiveReaction
         case _ => defaultNegativeReaction
       }
-    } else defaultNegativeReaction
-  }
+      case None => defaultNegativeReaction
+    }
 
   if (!environment.within(location))
     throw new IllegalArgumentException(s"$this spawned outside of environment")
