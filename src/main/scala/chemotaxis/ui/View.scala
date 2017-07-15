@@ -65,7 +65,7 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
     */
   def initializeState(foodSourcesSpawnCount: Option[Int] = None, bacteriaSpawnCount: Option[Int] = None): Unit = {
     current = current.initializedWith(FoodSource.spawnRandomFoodSources(foodSourcesSpawnCount.getOrElse(rng.nextInt(5) + (if (rng.nextBoolean()) 1 else 0)), _),
-                                  Bacterium.spawnRandomBacteria(bacteriaSpawnCount.getOrElse(rng.nextInt(50) + 1), _))
+                                      Bacterium.spawnRandomBacteria(bacteriaSpawnCount.getOrElse(rng.nextInt(50) + 1), _))
   }
 
   def initializeDisplay: (Dimension2D, GridPane) = {
@@ -130,10 +130,11 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
       val sessionSaveFileName = LocalDateTime.now.format((new format.DateTimeFormatterBuilder)
                                                            .appendPattern("HH-mm-ss_dd-LL-yyyy_")
                                                            .toFormatter) + baseSessionDBName
-      Files.write(cwdPath.resolve(sessionSaveFileName),
-                  (Seq(s"$frames", s"$fps") ++ history.map(_.toSerializableString)).asJava)
+      Files.write(cwdPath.resolve(sessionSaveFileName), toSerializableString.asJava)
     }).start()
   }
+
+  def toSerializableString: Seq[String] = ???
 
   def restoreState(stage: Stage): AnimationTimer = {
     val restoreFile = showFileChooserDialog("Choose the session database file to restore from",

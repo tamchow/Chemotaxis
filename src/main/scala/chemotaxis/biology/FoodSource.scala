@@ -143,12 +143,12 @@ object FoodSource extends UIProxy[FoodSource] {
     spawnRandomFoodSources(number, environment.innerRadius, environment)
 
   def spawnRandomFoodSources(number: Int, maxAmount: Double, environment: Environment): Seq[FoodSource] =
-    spawnRandomFoodSources(number, Seq.fill(number)(maxAmount), environment)
+    spawnRandomFoodSources(number, IndexedSeq.fill(number)(maxAmount), environment)
 
   def spawnRandomFoodSources(number: Int, maxAmounts: Seq[Double], environment: Environment): Seq[FoodSource] = {
     if (number < 0)
       throw new IllegalArgumentException(s"Number of food sources to be spawned, $number, cannot be -ve")
-    var foodSources = Seq[FoodSource]()
+    var foodSources = IndexedSeq[FoodSource]()
     while (foodSources.length < number) {
       val currentIndex = foodSources.length
       val foodSource = FoodSource.spawnRandomFoodSource(foodSources.length, environment, maxAmounts(currentIndex))

@@ -63,21 +63,12 @@ case class Bacterium(id: Int, location: Point,
     clampNormalized(verify(standardParameters.fissionLimitingHunger, Defaults.fissionLimitingHunger))
   private lazy val hybridizationLimitingHunger =
     clampNormalized(verify(standardParameters.hybridizationLimitingHunger, Defaults.hybridizationLimitingHunger))
-  lazy val speed: Double =
-    clampNonNegative(verify(initialSpeed, randomSpeed))
   private lazy val unTumbleThreshold =
     clampNormalized(verify(standardParameters.unTumbleThreshold, Defaults.unTumbleThreshold))
-  lazy val scaledSpeed: Double =
-    speed / Environment.pixelsPerMeter
   private lazy val _hunger =
     clampNormalized(if (hunger.isNaN) 0.0 else hunger)
   private lazy val hungerIncrement =
     clamp(0, 1 - _hunger)(verify(standardParameters.hungerIncrement, randomHungerIncrement(Defaults.scales, randomSpeed)))
-  // For collision velocity calculations, and other things...
-  lazy val mass: Double =
-    clampNatural(verify(standardParameters.massScale, Defaults.scales.massScale)) * (1 - _hunger)
-  lazy val force: Double =
-    clampNatural(verify(standardParameters.forceScale, Defaults.scales.forceScale)) * (1 - _hunger) - drag
 
   private def normalizeAngle(angle: Double): Double = {
     val normalizedAngle = angle % PiTimes2
@@ -92,6 +83,15 @@ case class Bacterium(id: Int, location: Point,
 
   // Just a way to get a color dependent on a unique constant property of a bacterium
   override lazy val defaultColor: Color = Color.hsb(responseCoefficient * 360, 1.0, 1.0)
+
+  private lazy val scaledFlagellaCount =
+    Try(flagella / environment.bacteria.map(_.flagella).max.toDouble).getOrElse(1.0)
+  // For collision velocity calculations, and other things...
+  // These 2 properties below can be expected to be proportional to the number of flagella.
+  lazy val mass: Double =
+    (1 + scaledFlagellaCount) * clampNatural(verify(standardParameters.massScale, Defaults.scales.massScale)) * (1 - _hunger)
+  lazy val force: Double =
+    (1 + scaledFlagellaCount) * clampNatural(verify(standardParameters.forceScale, Defaults.scales.forceScale)) * (1 - _hunger) - drag
   private lazy val internalArea = areaScale * mass
   private lazy val lengthScale = math.sqrt(internalArea) * 0.5
   private lazy val (width, height) = (clampNonNegative(size.getWidth), clampNatural(size.getHeight))
@@ -100,9 +100,11 @@ case class Bacterium(id: Int, location: Point,
   private lazy val flagellumLength = (lengthScale * diagonal).round
   private lazy val maxLinearDimension = 2 * flagellumLength
   private lazy val coefficientOfRestitution =
-    Try((maxLinearDimension / environment.bacteria.map(_.maxLinearDimension).max) *
-        (flagella / environment.bacteria.map(_.flagella).max.toDouble))
-      .getOrElse(1.0)
+    Try((maxLinearDimension / environment.bacteria.map(_.maxLinearDimension).max) * scaledFlagellaCount).getOrElse(1.0)
+  lazy val speed: Double =
+    clampNonNegative(verify(initialSpeed, randomSpeed))
+  lazy val scaledSpeed: Double =
+    speed / Environment.pixelsPerMeter
 
   override lazy val amount: Double = 1 - _hunger
   override lazy val toxicity: Double = _hunger
@@ -676,7 +678,7 @@ object Bacterium extends UIProxy[Bacterium] {
   def spawnRandomBacteria(number: Int, environment: Environment,
                           size: Dimension2D = Defaults.size,
                           scales: Scales = Defaults.scales): Seq[Bacterium] =
-    spawnRandomBacteria(number, environment, Seq.fill(number)(size), Seq.fill(number)(scales))
+    spawnRandomBacteria(number, environment, IndexedSeq.fill(number)(size), IndexedSeq.fill(number)(scales))
 
   def spawnRandomBacteria(number: Int, environment: Environment, sizes: Seq[Dimension2D], allScales: Seq[Scales]): Seq[Bacterium] = {
     if (number < 0)
