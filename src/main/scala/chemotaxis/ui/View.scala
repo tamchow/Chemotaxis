@@ -139,17 +139,13 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
   def restoreState(stage: Stage): AnimationTimer = {
     val restoreFile = showFileChooserDialog("Choose the session database file to restore from",
                                             createExtensionFilterList(sessionDatabaseExtensionInfo))(stage, baseSessionDBName)
-    val data = Files.readAllLines(restoreFile).asScala
-    fps = data(1).toDouble
     historyIndex.clear()
     history.clear()
-    history.sizeHint(data.length - 2)
-    history ++ data.drop(2).map(Environment.fromSerializableString)
-    historyIndex.sizeHint(history.length)
-    historyIndex ++= history
-    _frames = clamp(0, history.length)(data.head.toInt)
+    fromSerializableString(Files.readAllLines(restoreFile).asScala)
     simulationRunner(stage)
   }
+
+  def fromSerializableString(input: Seq[String]): Unit = ???
 
   def simulationRunner(stage: Stage): AnimationTimer = {
     _frames = 0
