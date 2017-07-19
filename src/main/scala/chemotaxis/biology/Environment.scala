@@ -15,6 +15,7 @@ import geometry.{CircularBiologicalRestrictedShape, Collisions, RestrictedShape}
 import Environment.{Parameters, Statistics}
 
 import language.postfixOps
+import scala.collection.SortedMap
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -176,7 +177,7 @@ case class Environment(width: Double, height: Double, center: Point,
     Geometry.lineIntersectsCircle(line, shape)
 
   lazy val withoutLocationHistory: Environment =
-    this.copy(statistics = this.statistics.copy(locationHistory = Map()))
+    this.copy(statistics = this.statistics.copy(locationHistory = SortedMap[Bacterium, Seq[LocationInfo]]()(Bacterium)))
 
   def updated(time: Double): Environment = {
     var currentEnvironment = copy()
@@ -185,16 +186,16 @@ case class Environment(width: Double, height: Double, center: Point,
       //log(bacterium)
       val (newEnvironment, newTemporaryBacteria) =
         bacterium.copy(environment = currentEnvironment).move(time)
-      val distinctNewBacteria = newTemporaryBacteria.distinct
       val newStatistics = newEnvironment.statistics
-      val spawnedBacteria = if (distinctNewBacteria.length > 1) distinctNewBacteria.count(_.isDefined) else 0
-      val killedBacteria = distinctNewBacteria.count(_.isEmpty)
+      val (newBacteriaTotal, newBacteriaCount) = (newTemporaryBacteria.length, newTemporaryBacteria.count(_.isDefined))
+      val spawnedBacteria = if (newBacteriaTotal > 1) newBacteriaCount else 0
+      val killedBacteria = newBacteriaTotal - newBacteriaCount
       val modifiedStatistics =
         newStatistics.copy(_deadBacteria = newStatistics.deadBacteria + killedBacteria,
                            _spawnedBacteria = newStatistics.spawnedBacteria + spawnedBacteria)
       currentEnvironment = newEnvironment.copy(allFoodSources = newEnvironment._allFoodSources,
                                                statistics = modifiedStatistics)
-      distinctNewBacteria
+      newTemporaryBacteria
     }).flatten
     //@formatter:off
     val liveBacteria = newBacteria.collect { case Some(bacterium) => bacterium }
@@ -211,8 +212,10 @@ case class Environment(width: Double, height: Double, center: Point,
                               .copy(locationHistory = currentEnvironment.locationHistoryUpdated,
                                     _deadBacteria =
                                       currentEnvironment.statistics.deadBacteria + (liveBacteria.length - realLiveBacteria.length),
-                                    _geneticallyUniqueBacteria = liveBacteria.distinctBy(_.responseCoefficient).length,
-                                    _stoppedBacteria = liveBacteria.count(_.stopped),
+                                    _geneticallyUniqueBacteria =
+                                      liveBacteria.distinctBy(_.responseCoefficient).length,
+                                    _stoppedBacteria =
+                                      liveBacteria.count(_.stopped),
                                     _maxGeneration =
                                       Try(liveBacteria.maxBy(_.generation)).map(_.generation)
                                         .getOrElse(currentEnvironment.statistics.maxGeneration)))
@@ -221,11 +224,15 @@ case class Environment(width: Double, height: Double, center: Point,
 
   //@formatter:off
   def locationHistoryUpdated: LocationHistory =
-    bacteria.foldLeft(statistics.locationHistory) { (locationHistory, bacterium) =>
+    bacteria.foldLeft(statistics.locationHistory) { (locationHistory, bacterium) => {
+      val (location, color) = bacterium.locationInfo
       locationHistory.get(bacterium) match {
-        case Some(points) => locationHistory.updated(bacterium, points :+ bacterium)
-        case None => locationHistory + (bacterium -> IndexedSeq(bacterium))
-      }}
+        case Some(points) =>
+          val LocationInfo(_, lastLocation, _) = points.last
+          locationHistory.updated(bacterium, points :+ LocationInfo(lastLocation, location, color))
+        case None =>
+          locationHistory + (bacterium -> IndexedSeq(LocationInfo(location, location, color)))
+      }}}
   //@formatter:on
 
   def newBacterialIDs(numOfBacteria: Int): Set[Int] =
@@ -247,18 +254,12 @@ case class Environment(width: Double, height: Double, center: Point,
 
   def drawTrails(canvas: GraphicsContext): Unit = {
     canvas.save()
+    /* Using a SortedMap ensures that the later bacteria have their trails drawn on top*/
     //log("Drawing trails")
     //noinspection ScalaUnusedSymbol
-    for ((individual, individualHistory) <- statistics.locationHistory.toSeq.sortBy(_._1.id)/* Draw the trails of later bacteria on top.*/) {
+    for ((individual, individualHistory) <- statistics.locationHistory) {
       //log(individual)
-      val segments =
-        individualHistory
-          .map(_.location)
-          .elementsRepeated(2)
-          .drop(1)
-          .dropRight(1)
-      val segmentColors = individualHistory.drop(1).map(_.visibleColor)
-      for ((((x1, y1), (x2, y2)), segmentColor) <- segments.pairWise.zip(segmentColors)) {
+      for (LocationInfo((x1, y1), (x2, y2), segmentColor) <- individualHistory) {
         canvas.setStroke(segmentColor)
         canvas.strokeLine(x1, y1, x2, y2)
       }
@@ -304,7 +305,9 @@ object Environment extends UIProxy[Environment] {
                         mediumViscosityIncrement: Double = Defaults.viscosityIncrement,
                         borderFactor: Double = Defaults.borderFactor)
 
-  type LocationHistory = Map[Bacterium, Seq[Bacterium]]
+  case class LocationInfo(lastLocation: Point, location: Point, color: Color)
+
+  type LocationHistory = SortedMap[Bacterium, Seq[LocationInfo]]
 
   case class Statistics(_deadBacteria: Int,
                         _spawnedBacteria: Int,
@@ -343,7 +346,7 @@ object Environment extends UIProxy[Environment] {
                                      _geneticallyUniqueBacteria = 0,
                                      _stoppedBacteria = 0,
                                      _maxGeneration = 1,
-                                     locationHistory = Map())
+                                     locationHistory = SortedMap[Bacterium, Seq[LocationInfo]]()(Bacterium))
 
     def apply(): Statistics = default
 

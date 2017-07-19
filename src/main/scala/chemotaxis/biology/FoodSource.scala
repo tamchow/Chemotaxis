@@ -103,7 +103,9 @@ case class FoodSource(id: Int, location: Point,
   }
 }
 
-object FoodSource extends UIProxy[FoodSource] {
+object FoodSource extends UIProxy[FoodSource] with Ordering[FoodSource] {
+
+  override def compare(x: FoodSource, y: FoodSource): Int = x.id compare y.id
 
   case class Scales(viscosityScale: Double = Defaults.viscosityScale,
                     densityScale: Double = Defaults.densityScale)

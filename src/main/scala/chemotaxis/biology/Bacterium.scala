@@ -14,7 +14,7 @@ import extensions.Extensions._
 import extensions.MathUtilities._
 import Bacterium.{BacteriumParameters, RotationParameters}
 
-import scala.util.Try
+import scala.util.{Success, Try}
 
 /**
   * Represents one bacterium
@@ -42,7 +42,7 @@ case class Bacterium(id: Int, location: Point,
           if (event.getButton == MouseButton.SECONDARY) {
             log(s"Secondary click, removing bacterium id $id")
             Some(environment.copy(bacteria =
-                                    environment.bacteria.filterNot(_ == this),
+                                    withoutThisBacterium(environment.bacteria),
                                   statistics =
                                     environment.statistics.copy(_deadBacteria =
                                                                   environment.statistics.deadBacteria + 1)))
@@ -52,6 +52,8 @@ case class Bacterium(id: Int, location: Point,
       }
       case None => defaultNegativeReaction
     }
+
+  private def withoutThisBacterium(bacteria: Seq[Bacterium]) = bacteria.filterNot(_ == this)
 
   if (!environment.within(location))
     throw new IllegalArgumentException(s"$this spawned outside of environment")
@@ -85,11 +87,11 @@ case class Bacterium(id: Int, location: Point,
   override lazy val defaultColor: Color = Color.hsb(responseCoefficient * 360, 1.0, 1.0)
 
   private lazy val scaledFlagellaCount =
-    Try(flagella / environment.bacteria.map(_.flagella).max.toDouble).getOrElse(1.0)
+    Try(flagella / environment.bacteria.maxBy(_.flagella).flagella.toDouble).getOrElse(1.0)
   // For collision velocity calculations, and other things...
   // These 2 properties below can be expected to be proportional to the number of flagella.
   lazy val mass: Double =
-    (1 + scaledFlagellaCount) * clampNatural(verify(standardParameters.massScale, Defaults.scales.massScale)) * (1 - _hunger)
+  (1 + scaledFlagellaCount) * clampNatural(verify(standardParameters.massScale, Defaults.scales.massScale)) * (1 - _hunger)
   lazy val force: Double =
     (1 + scaledFlagellaCount) * clampNatural(verify(standardParameters.forceScale, Defaults.scales.forceScale)) * (1 - _hunger) - drag
   private lazy val internalArea = areaScale * mass
@@ -100,7 +102,7 @@ case class Bacterium(id: Int, location: Point,
   private lazy val flagellumLength = (lengthScale * diagonal).round
   private lazy val maxLinearDimension = 2 * flagellumLength
   private lazy val coefficientOfRestitution =
-    Try((maxLinearDimension / environment.bacteria.map(_.maxLinearDimension).max) * scaledFlagellaCount).getOrElse(1.0)
+    Try((maxLinearDimension / environment.bacteria.maxBy(_.maxLinearDimension).maxLinearDimension) * scaledFlagellaCount).getOrElse(1.0)
   lazy val speed: Double =
     clampNonNegative(verify(initialSpeed, randomSpeed))
   lazy val scaledSpeed: Double =
@@ -113,13 +115,8 @@ case class Bacterium(id: Int, location: Point,
 
   private val probabilityScaleFactor = math.E * responseCoefficient
 
-  override def equals(obj: scala.Any): Boolean =
-    super.equals(obj) || (obj match {
-      case other: Bacterium => id == other.id
-      case _ => false
-    })
-
   lazy val stopped: Boolean = speed < ScreenEpsilon
+
   override lazy val toString: String =
     s"${getClass.getSimpleName}[" +
     s"ID = $id, location = ($x, $y)," +
@@ -138,6 +135,12 @@ case class Bacterium(id: Int, location: Point,
     s" force = (${standardParameters.forceScale}, $force)," +
     s" food source scoring function = ${standardParameters.scoringFunction}]"
 
+  override def equals(obj: scala.Any): Boolean =
+    super.equals(obj) || (obj match {
+      case other: Bacterium => id == other.id
+      case _ => false
+    })
+
   override lazy val hashCode: Int = id
 
   override def consumed(hunger: Double): FoodLike =
@@ -150,7 +153,7 @@ case class Bacterium(id: Int, location: Point,
 
   private def fed(localEnvironment: Environment, bacterium: Bacterium): (Boolean, Environment, Option[Bacterium]) = {
     val allFoodSources: Seq[FoodLike] = if (standardParameters.cannibal_?)
-                                          localEnvironment.foodSources ++ localEnvironment.bacteria.filterNot(_ == this)
+                                          localEnvironment.foodSources ++ withoutThisBacterium(localEnvironment.bacteria)
                                         else localEnvironment.foodSources
     val feeding = allFoodSources.filter(FoodSource.isExistent)
       // We need the bacteria to be on the food before it can consume it -
@@ -255,21 +258,19 @@ case class Bacterium(id: Int, location: Point,
         ((if (x > environment.center.x) -1 else 1) * size.getWidth,
           (if (y > environment.center.y) -1 else 1) * size.getHeight)
       val childLocations = IndexedSeq(location + locationOffset, location - locationOffset)
-      val allowedChildLocations = childLocations.filter(environment.within)
-      if (allowedChildLocations == childLocations) {
+      if (childLocations.count(environment.within) == childLocations.length)
         Some((copy(id = ids.head,
                    parents = parents :+ bacterium,
-                   location = allowedChildLocations(0),
+                   location = childLocations(0),
                    angle = _angle + offsetAngle,
                    initialSpeed = speed * math.sin(offsetAngle),
                    hunger = newHunger),
                copy(id = ids.last,
                     parents = parents :+ bacterium,
-                    location = allowedChildLocations(1),
+                    location = childLocations(1),
                     angle = _angle - offsetAngle,
                     initialSpeed = speed * math.cos(offsetAngle),
                     hunger = newHunger)))
-      }
       else None
     } else None
   }
@@ -277,10 +278,8 @@ case class Bacterium(id: Int, location: Point,
   lazy val withoutEnvironment: Bacterium =
     copy(environment = Environment.createBare(environment.width, environment.height))
 
-  private def quorum(foodSource: Option[FoodLike]): Int =
-    environment.bacteria
-      .filterNot(_ == this)
-      .count(_.closestFoodSource == foodSource)
+  private def quorum(foodSource: Try[FoodLike]): Int =
+    environment.bacteria.count(bacterium => bacterium != this && bacterium.closestFoodSource == foodSource)
 
   private def drag: Double = {
     val onFood = environment.foodSources.find(_.overlaps(this.baseShape))
@@ -302,12 +301,10 @@ case class Bacterium(id: Int, location: Point,
     standardParameters.scoringFunction.score(// We want to maximize closeness, not distance
                                              1 - calcNormalizedDistanceTo(foodSource),
                                              foodSource.nutrientToToxicityRatio,
-                                             quorum(Some(foodSource)))
+                                             quorum(Success(foodSource)))
 
-  def closestFoodSource: Option[FoodLike] =
-    environment.foodSources
-      .sortBy(calcNormalizedDistanceTo)
-      .headOption
+  def closestFoodSource: Try[FoodLike] =
+    Try(environment.foodSources.minBy(calcNormalizedDistanceTo))
 
   private def newRotationParameters(current: Bacterium): RotationParameters = {
     import current.rotationParameters._
@@ -317,33 +314,32 @@ case class Bacterium(id: Int, location: Point,
             _offsetAngle = offsetAngle + offsetAngleIncrement)
   }
 
-  private def distanceToBestCandidate(candidates: Seq[FoodLike]): Option[Double] =
-    candidates.sortWith(scoreSource(_) > scoreSource(_))
-      .headOption.map(calcNormalizedDistanceTo)
+  private def distanceToBestCandidate(candidates: Seq[FoodLike]): Try[Double] =
+    Try(candidates.maxBy(scoreSource)).map(calcNormalizedDistanceTo)
 
   def move(time: Double): (Environment, Seq[Option[Bacterium]]) = {
     val (bacterium, localEnvironment) = handleCollisions(environment)
     fed(localEnvironment, bacterium) match {
       case (didFeed, newEnvironment, newBacterium) if didFeed =>
-        (newEnvironment, Seq(newBacterium.map(raw => {
+        (newEnvironment, IndexedSeq(newBacterium.map(raw => {
           raw.copy(initialSpeed = speed,
                    environment = newEnvironment,
                    rotationParameters = newRotationParameters(raw))
         })))
       case (_, thisEnvironment, Some(thisBacterium)) =>
-        val unaltered = (thisEnvironment, Seq(Some(thisBacterium)))
+        val unaltered = (thisEnvironment, IndexedSeq(Some(thisBacterium)))
         // Handle binary fission
         divide(thisBacterium) match {
           case Some((offspring1, offspring2)) =>
             (thisEnvironment,
-              Seq(Some(offspring1),
+              IndexedSeq(Some(offspring1),
                   Some(offspring2),
                   None))
           case None =>
             val r =
               if (standardParameters.cannibal_?)
                 distanceToBestCandidate(thisEnvironment.foodSources)
-                  .getOrElse(distanceToBestCandidate(thisEnvironment.bacteria.filterNot(_ == thisBacterium))
+                  .getOrElse(distanceToBestCandidate(withoutThisBacterium(thisEnvironment.bacteria))
                                .getOrElse(1.0))
               else
                 distanceToBestCandidate(thisEnvironment.foodSources).getOrElse(1.0)
@@ -378,7 +374,7 @@ case class Bacterium(id: Int, location: Point,
               val (reflectedAngle, reflectedSpeed) = (reflectedVelocity.angle, reflectedVelocity.norm)
               // Safeguards
               if (thisEnvironment.within(reflectedLocation))
-                (thisEnvironment, Seq(Some(thisBacterium.copy(location = reflectedLocation,
+                (thisEnvironment, IndexedSeq(Some(thisBacterium.copy(location = reflectedLocation,
                                                               angle = verify(reflectedAngle, _angle),
                                                               initialSpeed = verify(reflectedSpeed, speed),
                                                               hunger = newHunger,
@@ -389,7 +385,7 @@ case class Bacterium(id: Int, location: Point,
             else {
               // Safeguards
               if (thisEnvironment.within(newLocation))
-                (thisEnvironment, Seq(Some(thisBacterium.copy(location = newLocation,
+                (thisEnvironment, IndexedSeq(Some(thisBacterium.copy(location = newLocation,
                                                               angle = verify(newAngle, _angle),
                                                               initialSpeed = verify(newSpeed, speed),
                                                               hunger = newHunger,
@@ -409,7 +405,7 @@ case class Bacterium(id: Int, location: Point,
     val startingAngle = _angle + PiBy2 + (if (rotated_?) 0.0 else sectorSweep) +
                         (if (rotated_?) (_angle - this.previousAngle) else -offsetAngle)
     //@formatter:off
-    Seq.tabulate(flagella) { flagellumIndex => {
+    IndexedSeq.tabulate(flagella) { flagellumIndex => {
       val offset = flagellumIndex * sectorSweep
       val flagellumAngle = (startingAngle + offset) % PiTimes2
       val relativeAngle = flagellumAngle - _angle
@@ -421,6 +417,7 @@ case class Bacterium(id: Int, location: Point,
     // .map(newLocation => if (environment.withinPlate(newLocation)) newLocation else (2.0 * location) - newLocation)
   }
 
+  lazy val locationInfo: (Point, Color) = (location, visibleColor)
   def handleCollisions(localEnvironment: Environment): (Bacterium, Environment) = {
     var thisBacterium = copy()
     val otherBacteria = for (otherBacterium <- localEnvironment.bacteria) yield {
@@ -501,7 +498,9 @@ case class Bacterium(id: Int, location: Point,
     }
 }
 
-object Bacterium extends UIProxy[Bacterium] {
+object Bacterium extends UIProxy[Bacterium]with Ordering[Bacterium] {
+
+  override def compare(x: Bacterium, y: Bacterium): Int = x.id compare y.id
 
   case class LimitingProbabilities(fissionLimitingProbability: Double,
                                    hybridizationLimitingProbability: Double) {

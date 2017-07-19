@@ -38,7 +38,6 @@ trait FoodLike extends CircularBiologicalRestrictedShape {
 
   override lazy val visibleColor: Color = color.getOrElse(defaultColor)
 
-
   val scales: Scales = Scales()
   val viscosity: Double =
     clampNatural(verify(scales.viscosityScale, FoodSource.Defaults.viscosityScale)) *
@@ -53,7 +52,6 @@ trait FoodLike extends CircularBiologicalRestrictedShape {
 }
 
 object FoodLike {
-
   def calcMaxAmount(maxAmount: Double): Double =
     clampNonNegative(maxAmount / 2)
 
