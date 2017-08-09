@@ -47,7 +47,6 @@ class Main extends Application {
       animationTimer.start()
     }
 
-    animationTimer.start()
     var paused = false
     val fpsIncrement = 1
     scene.addEventHandler(KeyEvent.KEY_PRESSED, (event: KeyEvent) => event.getCode match {
@@ -79,6 +78,9 @@ class Main extends Application {
       // @formatter:on
     })
     stage.setScene(scene)
+    stage.setResizable(false)
+    stage.sizeToScene()
+    animationTimer.start()
     stage.show()
   }
 }

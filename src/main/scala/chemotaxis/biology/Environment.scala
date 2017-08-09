@@ -254,7 +254,7 @@ case class Environment(width: Double, height: Double, center: Point,
 
   def drawTrails(canvas: GraphicsContext): Unit = {
     canvas.save()
-    /* Using a SortedMap ensures that the later bacteria have their trails drawn on top*/
+    /* Using a SortedMap ensures that the later bacteria have their trails drawn on top */
     //log("Drawing trails")
     //noinspection ScalaUnusedSymbol
     for ((individual, individualHistory) <- statistics.locationHistory) {

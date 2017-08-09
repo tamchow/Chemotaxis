@@ -354,7 +354,7 @@ object MathUtilities {
     else if (value > max) max
     else value
 
-  def clampAbove[T: Numeric : Limits](min: T): T => T =
+  @inline def clampAbove[T: Numeric : Limits](min: T): T => T =
     clamp[T](min, implicitly[Limits[T]].MaxValue)
 
   @inline def clampNonNegative[T: Numeric : Limits](value: T): T =
