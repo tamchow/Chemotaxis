@@ -1,6 +1,6 @@
-#Scala/JavaFX Chemotaxis simulator
+# Scala/JavaFX Chemotaxis simulator
 
-##Features
+## Features
 
 Simulates _E. coli_'s movement in a food concentration gradient.
 
@@ -13,7 +13,7 @@ Bacteria can also hybridize and reproduce by binary fission.
  
 This can be used to visualize a simplified version of chemotactic optimization.
 
-##Controls
+## Controls
 
 _Implemented_:
 
@@ -35,13 +35,13 @@ _Unimplemented:_
 14. <kbd>F2</kbd> to save session state
 15. <kbd>F3</kbd> to restore session state
 
-##Requirements
+## Requirements
 
 1. Scala 2.12.x (2.11+ should work)
 2. Java 8 Update 121 + JavaFX (Oracle JDK on Linux) (Java 8 Update 40+ should work)
 3. A powerful PC ;)
 
-##Enhancements
+## Enhancements
 
 1. Implement support for sessions (save and restore simulations) (Priority 1)
 2. Implement configuration via files (priority 2-3)
