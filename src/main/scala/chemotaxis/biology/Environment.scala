@@ -213,7 +213,7 @@ case class Environment(width: Double, height: Double, center: Point,
                                     _deadBacteria =
                                       currentEnvironment.statistics.deadBacteria + (liveBacteria.length - realLiveBacteria.length),
                                     _geneticallyUniqueBacteria =
-                                      liveBacteria.distinctBy(_.responseCoefficient).length,
+                                      liveBacteria.distinctBy(bacterium => (bacterium.meanRadius, bacterium.deviation)).length,
                                     _stoppedBacteria =
                                       liveBacteria.count(_.stopped),
                                     _maxGeneration =

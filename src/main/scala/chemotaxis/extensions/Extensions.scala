@@ -336,13 +336,13 @@ object MathUtilities {
   }
 
   implicit object IntLimits extends Limits[Int] {
-    val MaxValue = Int.MaxValue
-    val MinValue = Int.MinValue
+    val MaxValue: Int = Int.MaxValue
+    val MinValue: Int = Int.MinValue
   }
 
   implicit object DoubleLimits extends Limits[Double] {
-    val MaxValue = Double.MaxValue
-    val MinValue = Double.MinValue
+    val MaxValue: Double = Double.MaxValue
+    val MinValue: Double = Double.MinValue
   }
 
   @inline def verify(valueToCheck: => Double, default: => Double): Double =
@@ -378,6 +378,21 @@ object MathUtilities {
   val coNormalizedLogisticFunction:
     Double => Double =
     x => 1 - normalizedLogisticFunction(x)
+
+  private val RootPiBy2 = math.sqrt(Pi) / 2.0
+
+  /**
+    * Approximates the normal error function by the Bürmann series
+    *
+    * @param x a real number
+    * @return erf(x)
+    */
+  def erf(x: Double): Double =
+    (1.0 / RootPiBy2) * math.signum(x) * math.sqrt(1 - math.exp(-x.squared)) *
+    (RootPiBy2 + (31.0 / 200.0) * math.exp(-x.squared) + (341.0 / 8000.0) * math.exp(-2 * x.squared))
+
+  def gaussianProbability(mean: Double, deviation: Double): Double => Double =
+    x => erf((x - mean) / (math.sqrt(2) * deviation)).abs.min(1.0)
 
   object Geometry {
 

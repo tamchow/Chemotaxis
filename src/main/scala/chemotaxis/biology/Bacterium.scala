@@ -79,12 +79,13 @@ case class Bacterium(id: Int, location: Point,
 
   private lazy val _angle = normalizeAngle(verify(angle, normalizeAngle(verify(rotationParameters.previousAngle, randomAngle))))
   private lazy val previousAngle = verify(normalizeAngle(rotationParameters.previousAngle), _angle)
-  lazy val responseCoefficient: Double = clampNonNegative(verify(standardParameters.responseCoefficient, randomResponseCoefficient))
+  lazy val meanRadius: Double = clampNormalized(verify(standardParameters.meanRadius, randomResponseCoefficient))
+  lazy val deviation: Double = clampNormalized(verify(standardParameters.deviation, randomResponseCoefficient))
   val maxDistance: Double = environment.diameter
   private lazy val flagella = clampNatural(standardParameters.numberOfFlagella)
 
   // Just a way to get a color dependent on a unique constant property of a bacterium
-  override lazy val defaultColor: Color = Color.hsb(responseCoefficient * 360, 1.0, 1.0)
+  override lazy val defaultColor: Color = Color.hsb(meanRadius * 360, 1.0, 1.0)
 
   private lazy val scaledFlagellaCount =
     Try(flagella / environment.bacteria.maxBy(_.flagella).flagella.toDouble).getOrElse(1.0)
@@ -113,7 +114,21 @@ case class Bacterium(id: Int, location: Point,
   override lazy val maxAmount: Double = maxLinearDimension
   private val (x, y) = location.roundedDown
 
+  /*
+    // True Gaussian distribution - appears inefficient,  although it works
+    private val probabilityScaleFactor = 2.0 * math.sqrt(2.0)
+
+    private lazy val tumbleProbabilityFunction: Double => Double =
+      x => gaussianProbability(meanRadius, deviation)(probabilityScaleFactor * x).min(1 - Epsilon)
+      */
+
+  // Simplified Gaussian distribution with dynamic incentivized scaling - appears to be quite efficient
+  private val responseCoefficient = meanRadius / deviation
+
   private val probabilityScaleFactor = math.E * responseCoefficient
+
+  private lazy val tumbleProbabilityFunction: Double => Double =
+    x => (probabilityScaleFactor * x.squared * math.exp(-responseCoefficient * x.squared)).min(1 - Epsilon)
 
   lazy val stopped: Boolean = speed < ScreenEpsilon
 
@@ -124,7 +139,7 @@ case class Bacterium(id: Int, location: Point,
     //s" parents = $parents" +
     s" color = (provided = $color, current = $visiblePaint)," +
     s" flagella = $flagella (length = $flagellumLength)," +
-    s" speed = $speed, response = $responseCoefficient," +
+    s" speed = $speed, response = (mean radius = $meanRadius, deviation = $deviation)," +
     s" un-tumble threshold = $unTumbleThreshold, angle = ${_angle}," +
     s" mass = (${standardParameters.massScale}, $mass)" +
     s" area = (${standardParameters.areaScale}, X radius = $radiusX, Y radius = $radiusY)" +
@@ -217,7 +232,7 @@ case class Bacterium(id: Int, location: Point,
           willHybridize) {
         log(s"$bacterium1 hybridizing with $bacterium2")
         val averageResponseCoefficient =
-          (bacterium1.responseCoefficient + bacterium2.responseCoefficient) / 2.0
+          (bacterium1.meanRadius + bacterium2.meanRadius) / 2.0
         val averageScoringFunction =
           bacterium1.standardParameters.scoringFunction.average(bacterium2.standardParameters.scoringFunction)
         val averageNumberOfFlagella =
@@ -228,7 +243,7 @@ case class Bacterium(id: Int, location: Point,
                               //color = Some(bacterium1.visibleColor),
                               standardParameters =
                                 bacterium1.standardParameters
-                                  .copy(responseCoefficient = averageResponseCoefficient,
+                                  .copy(meanRadius = averageResponseCoefficient,
                                         scoringFunction = averageScoringFunction,
                                         numberOfFlagella = averageNumberOfFlagella)),
                bacterium2.copy(id = ids.last,
@@ -236,7 +251,7 @@ case class Bacterium(id: Int, location: Point,
                                //color = Some(bacterium2.visibleColor),
                                standardParameters =
                                  bacterium2.standardParameters
-                                   .copy(responseCoefficient = averageResponseCoefficient,
+                                   .copy(meanRadius = averageResponseCoefficient,
                                          scoringFunction = averageScoringFunction,
                                          numberOfFlagella = averageNumberOfFlagella))))
       } else None
@@ -333,8 +348,8 @@ case class Bacterium(id: Int, location: Point,
           case Some((offspring1, offspring2)) =>
             (thisEnvironment,
               IndexedSeq(Some(offspring1),
-                  Some(offspring2),
-                  None))
+                         Some(offspring2),
+                         None))
           case None =>
             val r =
               if (standardParameters.cannibal_?)
@@ -343,8 +358,7 @@ case class Bacterium(id: Int, location: Point,
                                .getOrElse(1.0))
               else
                 distanceToBestCandidate(thisEnvironment.foodSources).getOrElse(1.0)
-            val rawTumbleProbability = (thisBacterium.probabilityScaleFactor * r.squared *
-                                        math.exp(-thisBacterium.responseCoefficient * r.squared)).min(1 - Epsilon)
+            val rawTumbleProbability = tumbleProbabilityFunction(r)
             // Ensure that the bacterium doesn't get stuck away from food
             val tumbleProbability = rawTumbleProbability *
                                     (if (math.abs(rawTumbleProbability - unTumbleThreshold) > Epsilon)
@@ -375,22 +389,22 @@ case class Bacterium(id: Int, location: Point,
               // Safeguards
               if (thisEnvironment.within(reflectedLocation))
                 (thisEnvironment, IndexedSeq(Some(thisBacterium.copy(location = reflectedLocation,
-                                                              angle = verify(reflectedAngle, _angle),
-                                                              initialSpeed = verify(reflectedSpeed, speed),
-                                                              hunger = newHunger,
-                                                              environment = thisEnvironment,
-                                                              rotationParameters = nextRotationParameters))))
+                                                                     angle = verify(reflectedAngle, _angle),
+                                                                     initialSpeed = verify(reflectedSpeed, speed),
+                                                                     hunger = newHunger,
+                                                                     environment = thisEnvironment,
+                                                                     rotationParameters = nextRotationParameters))))
               else unaltered
             }
             else {
               // Safeguards
               if (thisEnvironment.within(newLocation))
                 (thisEnvironment, IndexedSeq(Some(thisBacterium.copy(location = newLocation,
-                                                              angle = verify(newAngle, _angle),
-                                                              initialSpeed = verify(newSpeed, speed),
-                                                              hunger = newHunger,
-                                                              environment = thisEnvironment,
-                                                              rotationParameters = nextRotationParameters))))
+                                                                     angle = verify(newAngle, _angle),
+                                                                     initialSpeed = verify(newSpeed, speed),
+                                                                     hunger = newHunger,
+                                                                     environment = thisEnvironment,
+                                                                     rotationParameters = nextRotationParameters))))
               else unaltered
             }
         }
@@ -418,6 +432,7 @@ case class Bacterium(id: Int, location: Point,
   }
 
   lazy val locationInfo: (Point, Color) = (location, visibleColor)
+
   def handleCollisions(localEnvironment: Environment): (Bacterium, Environment) = {
     var thisBacterium = copy()
     val otherBacteria = for (otherBacterium <- localEnvironment.bacteria) yield {
@@ -498,7 +513,7 @@ case class Bacterium(id: Int, location: Point,
     }
 }
 
-object Bacterium extends UIProxy[Bacterium]with Ordering[Bacterium] {
+object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
 
   override def compare(x: Bacterium, y: Bacterium): Int = x.id compare y.id
 
@@ -520,7 +535,8 @@ object Bacterium extends UIProxy[Bacterium]with Ordering[Bacterium] {
     def apply(): LimitingProbabilities = default
   }
 
-  case class BacteriumParameters(responseCoefficient: Double,
+  case class BacteriumParameters(meanRadius: Double,
+                                 deviation: Double,
                                  numberOfFlagella: Int,
                                  hungerIncrement: Double,
                                  fissionLimitingHunger: Double,
@@ -573,7 +589,7 @@ object Bacterium extends UIProxy[Bacterium]with Ordering[Bacterium] {
     val initialHunger: Double = 0.0
     // This clamping range has been decided from careful optimization,
     // the Boltzmann function behaves weirdly otherwise
-    val (minResponseCoefficient, maxResponseCoefficient) = (0.1, 1.0)
+    val (minScaledRadius, maxScaledRadius) = (0.1, 1.0)
     // Following are arbitrary
     val size = new Dimension2D(30, 10)
     val scales = Scales(hungerScale = 0.01,
@@ -616,7 +632,7 @@ object Bacterium extends UIProxy[Bacterium]with Ordering[Bacterium] {
 
   lazy val geneticDistinctionCriteria: (Bacterium) => (Double, FoodSourceScoringFunction) =
     (bacterium: Bacterium) =>
-      (bacterium.responseCoefficient, bacterium.standardParameters.scoringFunction)
+      (bacterium.meanRadius, bacterium.standardParameters.scoringFunction)
 
   private def randomAngle = rng.nextDouble(PiTimes2)
 
@@ -626,7 +642,7 @@ object Bacterium extends UIProxy[Bacterium]with Ordering[Bacterium] {
     rng.nextDouble((verifiedInitialSpeed + (if (verifiedInitialSpeed == Defaults.minSpeed) 1.0 else 0.0) - Defaults.minSpeed) / Defaults.maxSpeedDelta)
   }
 
-  private def randomResponseCoefficient = rng.nextDouble(Defaults.minResponseCoefficient, Defaults.maxResponseCoefficient)
+  private def randomResponseCoefficient = rng.nextDouble(Defaults.minScaledRadius, Defaults.maxScaledRadius)
 
   private def randomNumberOfFlagella = 1 + rng.nextInt(Defaults.maxFlagella)
 
@@ -641,6 +657,7 @@ object Bacterium extends UIProxy[Bacterium]with Ordering[Bacterium] {
     val (initialSpeed, initialAngle) =
       (randomSpeed, randomAngle)
     val standardParameters = BacteriumParameters(randomResponseCoefficient,
+                                                 randomResponseCoefficient,
                                                  randomNumberOfFlagella,
                                                  randomHungerIncrement(scales, initialSpeed),
                                                  Defaults.fissionLimitingHunger,
