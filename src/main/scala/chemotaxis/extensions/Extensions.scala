@@ -391,8 +391,8 @@ object MathUtilities {
     (1.0 / RootPiBy2) * math.signum(x) * math.sqrt(1 - math.exp(-x.squared)) *
     (RootPiBy2 + (31.0 / 200.0) * math.exp(-x.squared) + (341.0 / 8000.0) * math.exp(-2 * x.squared))
 
-  def gaussianProbability(mean: Double, deviation: Double): Double => Double =
-    x => erf((x - mean) / (math.sqrt(2) * deviation)).abs.min(1.0)
+  def gaussianProbability(mean: Double, deviation: Double, scaleFactor: Double = 2.0 * math.sqrt(2.0)): Double => Double =
+    x => erf(scaleFactor * ((x - mean) / (math.sqrt(2) * deviation))).abs.min(1.0)
 
   object Geometry {
 

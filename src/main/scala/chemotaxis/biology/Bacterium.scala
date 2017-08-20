@@ -114,13 +114,11 @@ case class Bacterium(id: Int, location: Point,
   override lazy val maxAmount: Double = maxLinearDimension
   private val (x, y) = location.roundedDown
 
+  // True Gaussian distribution - appears inefficient,  although it works
   /*
-    // True Gaussian distribution - appears inefficient,  although it works
-    private val probabilityScaleFactor = 2.0 * math.sqrt(2.0)
-
     private lazy val tumbleProbabilityFunction: Double => Double =
-      x => gaussianProbability(meanRadius, deviation)(probabilityScaleFactor * x).min(1 - Epsilon)
-      */
+      x => gaussianProbability(meanRadius, deviation)(x).min(1 - Epsilon)
+  */
 
   // Simplified Gaussian distribution with dynamic incentivized scaling - appears to be quite efficient
   private val responseCoefficient = meanRadius / deviation
