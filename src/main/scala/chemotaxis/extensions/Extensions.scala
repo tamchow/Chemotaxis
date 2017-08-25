@@ -85,6 +85,9 @@ object Extensions {
       d
     }
 
+    def choose[E](n: Int)(seq: Traversable[E]): Traversable[E] = util.Random.shuffle(seq).take(n)
+
+    def choose[E](seq: Traversable[E]): Option[E] = choose(1)(seq).headOption
   }
 
   final implicit class RichSeq[+T](base: Seq[T]) {
@@ -146,8 +149,14 @@ object Extensions {
 
     def X(that: Vector2D): Double = cross(that)
 
+    def diff(that: Vector2D): Vector2D =
+      (that.x - x, that.y - y)
+
     def distance(that: Vector2D): Double =
-      (that.x - x, that.y - y).norm
+      diff(that).norm
+
+    def angle(that: Vector2D): Double =
+      diff(that).angle
 
     lazy val angle: Double = Math.atan2(y, x)
 
@@ -381,6 +390,9 @@ object MathUtilities {
 
   private val RootPiBy2 = math.sqrt(Pi) / 2.0
 
+  def gaussian(mean: Double, deviation: Double): Double => Double =
+    x => (1.0 / math.sqrt(2 * Pi)) * (math.exp(-(x - mean).squared / (2 * deviation.squared))) / deviation
+
   /**
     * Approximates the normal error function by the Bürmann series
     *
@@ -392,7 +404,7 @@ object MathUtilities {
     (RootPiBy2 + (31.0 / 200.0) * math.exp(-x.squared) + (341.0 / 8000.0) * math.exp(-2 * x.squared))
 
   def gaussianProbability(mean: Double, deviation: Double, scaleFactor: Double = 2.0 * math.sqrt(2.0)): Double => Double =
-    x => erf(scaleFactor * ((x - mean) / (math.sqrt(2) * deviation))).abs.min(1.0)
+    x => erf(scaleFactor * ((x - mean) / (math.sqrt(2) * deviation))).squared.min(1 - Epsilon)
 
   object Geometry {
 

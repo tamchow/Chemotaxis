@@ -114,19 +114,21 @@ case class Bacterium(id: Int, location: Point,
   override lazy val maxAmount: Double = maxLinearDimension
   private val (x, y) = location.roundedDown
 
-  // True Gaussian distribution - appears inefficient,  although it works
-  /*
-    private lazy val tumbleProbabilityFunction: Double => Double =
-      x => gaussianProbability(meanRadius, deviation)(x).min(1 - Epsilon)
-  */
-
-  // Simplified Gaussian distribution with dynamic incentivized scaling - appears to be quite efficient
   private val responseCoefficient = meanRadius / deviation
 
-  private val probabilityScaleFactor = math.E * responseCoefficient
-
-  private lazy val tumbleProbabilityFunction: Double => Double =
-    x => (probabilityScaleFactor * x.squared * math.exp(-responseCoefficient * x.squared)).min(1 - Epsilon)
+  private lazy val tumbleProbabilityFunction: (Double, Double) => Double =
+    standardParameters.tumbleProbabilityFunctionType match {
+      case TumbleProbabilityFunction.TrueGaussian =>
+        // True Gaussian distribution - appears inefficient,  although it works
+        (r: Double, _: Double) => gaussianProbability(meanRadius, deviation)(r)
+      case TumbleProbabilityFunction.SimpleGaussian =>
+        // Simplified Gaussian distribution with dynamic incentivized scaling - appears to be quite efficient
+        val probabilityScaleFactor = math.E * responseCoefficient
+        (r: Double, _: Double) => (probabilityScaleFactor * r.squared * math.exp(-responseCoefficient * r.squared)).min(1 - Epsilon)
+      case TumbleProbabilityFunction.IntelligentGaussian =>
+        // Intelligent Gaussian distribution utilising a linear combination of both angle and distance to food source
+        (r: Double, angle: Double) => responseCoefficient * gaussian(Pi, math.sqrt(Pi))(angle) + (1 - responseCoefficient) * gaussian(1.0, 1.0)(r)
+    }
 
   lazy val stopped: Boolean = speed < ScreenEpsilon
 
@@ -146,7 +148,8 @@ case class Bacterium(id: Int, location: Point,
     s" (fission = $fissionLimitingHunger," +
     s" hybridization = $hybridizationLimitingHunger)," +
     s" force = (${standardParameters.forceScale}, $force)," +
-    s" food source scoring function = ${standardParameters.scoringFunction}]"
+    s" food source scoring function = ${standardParameters.scoringFunction}" +
+    s" tumble probability function = ${standardParameters.tumbleProbabilityFunctionType}]"
 
   override def equals(obj: scala.Any): Boolean =
     super.equals(obj) || (obj match {
@@ -215,8 +218,10 @@ case class Bacterium(id: Int, location: Point,
       (true, newEnvironment, None)
   }
 
-  private val calcNormalizedDistanceTo: (FoodLike) => Double =
+  private val calcNormalizedDistanceTo: FoodLike => Double =
     foodSource => location.distance(foodSource.location) / maxDistance
+  private val calcNormalizedAngleTo: FoodLike => Double =
+    foodSource => normalizeAngle(location.angle(foodSource.location))
 
   private def hybridize(bacterium1: Bacterium, bacterium2: Bacterium):
   Option[(Bacterium, Bacterium)] = {
@@ -327,8 +332,8 @@ case class Bacterium(id: Int, location: Point,
             _offsetAngle = offsetAngle + offsetAngleIncrement)
   }
 
-  private def distanceToBestCandidate(candidates: Seq[FoodLike]): Try[Double] =
-    Try(candidates.maxBy(scoreSource)).map(calcNormalizedDistanceTo)
+  private def bestCandidate(candidates: Seq[FoodLike]): Try[FoodLike] =
+    Try(candidates.maxBy(scoreSource))
 
   def move(time: Double): (Environment, Seq[Option[Bacterium]]) = {
     val (bacterium, localEnvironment) = handleCollisions(environment)
@@ -349,14 +354,15 @@ case class Bacterium(id: Int, location: Point,
                          Some(offspring2),
                          None))
           case None =>
-            val r =
-              if (standardParameters.cannibal_?)
-                distanceToBestCandidate(thisEnvironment.foodSources)
-                  .getOrElse(distanceToBestCandidate(withoutThisBacterium(thisEnvironment.bacteria))
-                               .getOrElse(1.0))
+            val initialTarget = bestCandidate(thisEnvironment.foodSources)
+            val target =
+              if (standardParameters.cannibal_? && initialTarget.isFailure)
+                bestCandidate(withoutThisBacterium(thisEnvironment.bacteria))
               else
-                distanceToBestCandidate(thisEnvironment.foodSources).getOrElse(1.0)
-            val rawTumbleProbability = tumbleProbabilityFunction(r)
+                initialTarget
+            val r = target.map(calcNormalizedDistanceTo).getOrElse(1.0)
+            val angleToTarget = target.map(calcNormalizedAngleTo).getOrElse(0.0)
+            val rawTumbleProbability = tumbleProbabilityFunction(r, angleToTarget)
             // Ensure that the bacterium doesn't get stuck away from food
             val tumbleProbability = rawTumbleProbability *
                                     (if (math.abs(rawTumbleProbability - unTumbleThreshold) > Epsilon)
@@ -533,6 +539,7 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
     def apply(): LimitingProbabilities = default
   }
 
+
   case class BacteriumParameters(meanRadius: Double,
                                  deviation: Double,
                                  numberOfFlagella: Int,
@@ -541,6 +548,7 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
                                  hybridizationLimitingHunger: Double,
                                  massScale: Double, forceScale: Double, areaScale: Double,
                                  scoringFunction: FoodSourceScoringFunction,
+                                 tumbleProbabilityFunctionType: TumbleProbabilityFunction.TumbleProbabilityFunction,
                                  limitingProbabilities: LimitingProbabilities,
                                  unTumbleThreshold: Double,
                                  cannibal_? : Boolean)
@@ -552,6 +560,11 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
 
     def average(other: FoodSourceScoringFunction): FoodSourceScoringFunction =
       FoodSourceScoringFunction((a + other.a) / 2.0, (b + other.b) / 2.0, (c + other.c) / 2.0)
+  }
+
+  object TumbleProbabilityFunction extends Enumeration {
+    type TumbleProbabilityFunction = Value
+    val TrueGaussian, IntelligentGaussian, SimpleGaussian = Value
   }
 
   object FoodSourceScoringFunction {
@@ -646,6 +659,9 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
 
   def randomSpeed: Double = rng.nextDouble(Defaults.minSpeed, Defaults.maxSpeed).round
 
+  def randomTumbleProbabilityFunction: TumbleProbabilityFunction.TumbleProbabilityFunction =
+    rng.choose(TumbleProbabilityFunction.values).get
+
   def spawnRandomBacterium(id: Int, location: Point, environment: Environment): Bacterium =
     spawnRandomBacterium(id, location, environment, Defaults.size, Defaults.scales)
 
@@ -662,6 +678,7 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
                                                  Defaults.hybridizationLimitingHunger,
                                                  scales.massScale, scales.forceScale, scales.areaScale,
                                                  Defaults.scoringFunction,
+                                                 randomTumbleProbabilityFunction,
                                                  Defaults.limitingProbabilities,
                                                  Defaults.unTumbleThreshold,
                                                  /*
