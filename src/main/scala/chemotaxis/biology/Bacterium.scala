@@ -14,7 +14,8 @@ import extensions.Extensions._
 import extensions.MathUtilities._
 import Bacterium.{BacteriumParameters, RotationParameters}
 
-import scala.util.{Success, Try}
+import util.{Success, Try}
+import math.Pi
 
 /**
   * Represents one bacterium

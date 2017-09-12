@@ -326,14 +326,16 @@ object ColorUtilities {
 object MathUtilities {
 
   import Extensions._
+  import math._
 
-  @inline val Sqrt2: Double = Math.sqrt(2)
+  @inline val Sqrt2: Double = sqrt(2)
   @inline val Epsilon: Double = 1E-6
   @inline val ScreenEpsilon: Double = 1E-3
-  @inline val Pi = Math.PI
   @inline val PiBy2: Double = Pi / 2.0
   @inline val PiBy4: Double = Pi / 4.0
   @inline val PiTimes2: Double = 2.0 * Pi
+  @inline private val Sqrt2Pi: Double = sqrt(PiTimes2)
+  @inline private val RootPiBy2 = sqrt(Pi) / 2.0
 
   val normalInterval: Interval = Interval(0, startOpen = true, 1, endOpen = true)
   val normalIntervalClosed: Interval = Interval(0, startOpen = false, 1, endOpen = false)
@@ -372,26 +374,19 @@ object MathUtilities {
   @inline def clampNatural[T: Numeric : Limits](value: T): T =
     clampAbove[T](implicitly[Numeric[T]].one).apply(value)
 
-  @inline def clampNormalized:
-  Double => Double =
-    clamp(0.0, 1.0)
+  @inline def clampNormalized: Double => Double = clamp(0.0, 1.0)
 
-  def logisticFunction(x0: Double, C: Double, L: Double, K: Double):
-  Double => Double =
+  def logisticFunction(x0: Double, C: Double, L: Double, K: Double): Double => Double =
     x => L / (C + Math.exp(-K * (x - x0)))
 
-  val normalizedLogisticFunction:
-    Double => Double =
+  val normalizedLogisticFunction: Double => Double =
     x => logisticFunction(0.5, 1, 1, 9)(clampNormalized(x))
 
-  val coNormalizedLogisticFunction:
-    Double => Double =
+  val coNormalizedLogisticFunction: Double => Double =
     x => 1 - normalizedLogisticFunction(x)
 
-  private val RootPiBy2 = math.sqrt(Pi) / 2.0
-
   def gaussian(mean: Double, deviation: Double): Double => Double =
-    x => (1.0 / math.sqrt(2 * Pi)) * (math.exp(-(x - mean).squared / (2 * deviation.squared))) / deviation
+    x => math.exp(-((x - mean) / deviation).squared / 2.0) / (Sqrt2Pi * deviation)
 
   /**
     * Approximates the normal error function by the Bürmann series
