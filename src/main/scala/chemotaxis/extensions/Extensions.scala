@@ -328,14 +328,14 @@ object MathUtilities {
   import Extensions._
   import math._
 
-  @inline val Sqrt2: Double = sqrt(2)
-  @inline val Epsilon: Double = 1E-6
-  @inline val ScreenEpsilon: Double = 1E-3
-  @inline val PiBy2: Double = Pi / 2.0
-  @inline val PiBy4: Double = Pi / 4.0
-  @inline val PiTimes2: Double = 2.0 * Pi
-  @inline private val Sqrt2Pi: Double = sqrt(PiTimes2)
-  @inline private val RootPiBy2 = sqrt(Pi) / 2.0
+  val Sqrt2: Double = sqrt(2)
+  val Epsilon: Double = 1E-6
+  val ScreenEpsilon: Double = 1E-3
+  val PiBy2: Double = Pi / 2.0
+  val PiBy4: Double = Pi / 4.0
+  val PiTimes2: Double = 2.0 * Pi
+  private val Sqrt2Pi: Double = sqrt(PiTimes2)
+  private val RootPiBy2 = sqrt(Pi) / 2.0
 
   val normalInterval: Interval = Interval(0, startOpen = true, 1, endOpen = true)
   val normalIntervalClosed: Interval = Interval(0, startOpen = false, 1, endOpen = false)
