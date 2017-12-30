@@ -2,7 +2,7 @@ name := "ChemotaxisSimulator"
 
 version := "0.8"
 organization := "in.github.tamchow"
-scalaVersion := "2.12.2"
+scalaVersion := "2.12.4"
 
 scalacOptions += "-feature"
 
