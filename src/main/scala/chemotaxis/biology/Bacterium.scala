@@ -21,7 +21,7 @@ import math.Pi
   * Represents one bacterium
   */
 case class Bacterium(id: Int, location: Point,
-                     size: Dimension2D, angle: Double,
+                     size: Dimension2D, orientation: Double,
                      initialSpeed: Double,
                      hunger: Double,
                      standardParameters: BacteriumParameters,
@@ -61,27 +61,27 @@ case class Bacterium(id: Int, location: Point,
 
   override val center: Point = location
   private lazy val areaScale =
-    clampNonNegative(verify(standardParameters.areaScale, Defaults.scales.areaScale))
+    clampNonNegative(isFiniteOrDefault(standardParameters.areaScale, Defaults.scales.areaScale))
   private lazy val fissionLimitingHunger =
-    clampNormalized(verify(standardParameters.fissionLimitingHunger, Defaults.fissionLimitingHunger))
+    clampNormalized(isFiniteOrDefault(standardParameters.fissionLimitingHunger, Defaults.fissionLimitingHunger))
   private lazy val hybridizationLimitingHunger =
-    clampNormalized(verify(standardParameters.hybridizationLimitingHunger, Defaults.hybridizationLimitingHunger))
+    clampNormalized(isFiniteOrDefault(standardParameters.hybridizationLimitingHunger, Defaults.hybridizationLimitingHunger))
   private lazy val unTumbleThreshold =
-    clampNormalized(verify(standardParameters.unTumbleThreshold, Defaults.unTumbleThreshold))
+    clampNormalized(isFiniteOrDefault(standardParameters.unTumbleThreshold, Defaults.unTumbleThreshold))
   private lazy val _hunger =
     clampNormalized(if (hunger.isNaN) 0.0 else hunger)
   private lazy val hungerIncrement =
-    clamp(0, 1 - _hunger)(verify(standardParameters.hungerIncrement, randomHungerIncrement(Defaults.scales, randomSpeed)))
+    clamp(0, 1 - _hunger)(isFiniteOrDefault(standardParameters.hungerIncrement, randomHungerIncrement(Defaults.scales, randomSpeed)))
 
   private def normalizeAngle(angle: Double): Double = {
     val normalizedAngle = angle % PiTimes2
     (if (normalizedAngle < 0.0) PiTimes2 else 0.0) + normalizedAngle
   }
 
-  private lazy val _angle = normalizeAngle(verify(angle, normalizeAngle(verify(rotationParameters.previousAngle, randomAngle))))
-  private lazy val previousAngle = verify(normalizeAngle(rotationParameters.previousAngle), _angle)
-  lazy val meanRadius: Double = clampNormalized(verify(standardParameters.meanRadius, randomResponseCoefficient))
-  lazy val deviation: Double = clampNormalized(verify(standardParameters.deviation, randomResponseCoefficient))
+  private lazy val _orientation = normalizeAngle(isFiniteOrDefault(orientation, normalizeAngle(isFiniteOrDefault(rotationParameters.previousAngle, randomAngle))))
+  private lazy val previousOrientation = isFiniteOrDefault(normalizeAngle(rotationParameters.previousAngle), _orientation)
+  lazy val meanRadius: Double = clampNormalized(isFiniteOrDefault(standardParameters.meanRadius, randomResponseCoefficient))
+  lazy val deviation: Double = clampNormalized(isFiniteOrDefault(standardParameters.deviation, randomResponseCoefficient))
   val maxDistance: Double = environment.diameter
   private lazy val flagella = clampNatural(standardParameters.numberOfFlagella)
 
@@ -93,9 +93,9 @@ case class Bacterium(id: Int, location: Point,
   // For collision velocity calculations, and other things...
   // These 2 properties below can be expected to be proportional to the number of flagella.
   lazy val mass: Double =
-  (1 + scaledFlagellaCount) * clampNatural(verify(standardParameters.massScale, Defaults.scales.massScale)) * (1 - _hunger)
+  (1 + scaledFlagellaCount) * clampNatural(isFiniteOrDefault(standardParameters.massScale, Defaults.scales.massScale)) * (1 - _hunger)
   lazy val force: Double =
-    (1 + scaledFlagellaCount) * clampNatural(verify(standardParameters.forceScale, Defaults.scales.forceScale)) * (1 - _hunger) - drag
+    (1 + scaledFlagellaCount) * clampNatural(isFiniteOrDefault(standardParameters.forceScale, Defaults.scales.forceScale)) * (1 - _hunger) - drag
   private lazy val internalArea = areaScale * mass
   private lazy val lengthScale = math.sqrt(internalArea) * 0.5
   private lazy val (width, height) = (clampNonNegative(size.getWidth), clampNatural(size.getHeight))
@@ -106,7 +106,7 @@ case class Bacterium(id: Int, location: Point,
   private lazy val coefficientOfRestitution =
     Try((maxLinearDimension / environment.bacteria.maxBy(_.maxLinearDimension).maxLinearDimension) * scaledFlagellaCount).getOrElse(1.0)
   lazy val speed: Double =
-    clampNonNegative(verify(initialSpeed, randomSpeed))
+    clampNonNegative(isFiniteOrDefault(initialSpeed, randomSpeed))
   lazy val scaledSpeed: Double =
     speed / Environment.pixelsPerMeter
 
@@ -117,19 +117,27 @@ case class Bacterium(id: Int, location: Point,
 
   private val responseCoefficient = meanRadius / deviation
 
-  private lazy val tumbleProbabilityFunction: (Double, Double) => Double =
+  private def tumbleProbabilityFunction(r: Double, angle: Double): Double =
     standardParameters.tumbleProbabilityFunctionType match {
       case TumbleProbabilityFunction.TrueGaussian =>
         // True Gaussian distribution - appears inefficient,  although it works
-        (r: Double, _: Double) => gaussianProbability(meanRadius, deviation)(r)
+        gaussianProbability(meanRadius, deviation)(r)
       case TumbleProbabilityFunction.SimpleGaussian =>
         // Simplified Gaussian distribution with dynamic incentivized scaling - appears to be quite efficient
         val probabilityScaleFactor = math.E * responseCoefficient
-        (r: Double, _: Double) => (probabilityScaleFactor * r.squared * math.exp(-responseCoefficient * r.squared)).min(1 - Epsilon)
-      case TumbleProbabilityFunction.IntelligentGaussian =>
-        // Intelligent Gaussian distribution utilising a linear combination of both angle and distance to food source
-        (r: Double, angle: Double) => responseCoefficient * gaussian(Pi, math.sqrt(Pi))(angle) + (1 - responseCoefficient) * gaussian(1.0, 1.0)(r)
+        (probabilityScaleFactor * r.squared * math.exp(-responseCoefficient * r.squared)).min(1 - Epsilon)
+      case TumbleProbabilityFunction.OverallSigmoid =>
+        // Intelligent Sigmoid distribution utilising a linear combination of both angle and distance to food source
+        // Targets based on the overall chemical potential (concentration gradient)
+        responseCoefficient * gaussian(Pi, math.sqrt(Pi))(angle) + (1 - responseCoefficient) * sigmoid(concentrationGradientOverTime)
+      case TumbleProbabilityFunction.TargetedSigmoid =>
+        // Intelligent Sigmoid distribution utilising a linear combination of both angle and distance to food source
+        // Targets based on the current best food source
+        responseCoefficient * gaussian(Pi, math.sqrt(Pi))(angle) + (1 - responseCoefficient) * sigmoid(r)
     }
+
+  private lazy val concentrationGradientOverTime: Double =
+    speed * environment.foodSources.map(foodSource => foodSource.nutrientToToxicityRatio / calcNormalizedDistanceTo(foodSource)).sum
 
   lazy val stopped: Boolean = speed < ScreenEpsilon
 
@@ -141,7 +149,7 @@ case class Bacterium(id: Int, location: Point,
     s" color = (provided = $color, current = $visiblePaint)," +
     s" flagella = $flagella (length = $flagellumLength)," +
     s" speed = $speed, response = (mean radius = $meanRadius, deviation = $deviation)," +
-    s" un-tumble threshold = $unTumbleThreshold, angle = ${_angle}," +
+    s" un-tumble threshold = $unTumbleThreshold, angle = ${_orientation}," +
     s" mass = (${standardParameters.massScale}, $mass)" +
     s" area = (${standardParameters.areaScale}, X radius = $radiusX, Y radius = $radiusY)" +
     s" hunger = (base = ${_hunger}, increment = $hungerIncrement)," +
@@ -281,13 +289,13 @@ case class Bacterium(id: Int, location: Point,
         Some((copy(id = ids.head,
                    parents = parents :+ bacterium,
                    location = childLocations(0),
-                   angle = _angle + offsetAngle,
+                   orientation = _orientation + offsetAngle,
                    initialSpeed = speed * math.sin(offsetAngle),
                    hunger = newHunger),
                copy(id = ids.last,
                     parents = parents :+ bacterium,
                     location = childLocations(1),
-                    angle = _angle - offsetAngle,
+                    orientation = _orientation - offsetAngle,
                     initialSpeed = speed * math.cos(offsetAngle),
                     hunger = newHunger)))
       else None
@@ -329,7 +337,7 @@ case class Bacterium(id: Int, location: Point,
     import current.rotationParameters._
     current.rotationParameters
       .copy(rotated_? = false,
-            previousAngle = _angle,
+            previousAngle = _orientation,
             _offsetAngle = offsetAngle + offsetAngleIncrement)
   }
 
@@ -378,7 +386,7 @@ case class Bacterium(id: Int, location: Point,
             // as these indicate energy reserves and expenditure by the bacterium.
             val newHunger = thisBacterium._hunger + thisBacterium.hungerIncrement +
                             ((distanceToMove / thisBacterium.maxDistance) * thisBacterium._hunger * thisBacterium.hungerIncrement)
-            val newAngle = thisBacterium._angle + tumbleDirection
+            val newAngle = thisBacterium._orientation + tumbleDirection
             val newSpeed = calcSpeed(time)
             val newLocation = (location + Vector2D.fromMagnitudeAndAngle(distanceToMove, newAngle)).rounded
             val moveLine = RichLine(location, newLocation)
@@ -394,8 +402,8 @@ case class Bacterium(id: Int, location: Point,
               // Safeguards
               if (thisEnvironment.within(reflectedLocation))
                 (thisEnvironment, IndexedSeq(Some(thisBacterium.copy(location = reflectedLocation,
-                                                                     angle = verify(reflectedAngle, _angle),
-                                                                     initialSpeed = verify(reflectedSpeed, speed),
+                                                                     orientation = isFiniteOrDefault(reflectedAngle, _orientation),
+                                                                     initialSpeed = isFiniteOrDefault(reflectedSpeed, speed),
                                                                      hunger = newHunger,
                                                                      environment = thisEnvironment,
                                                                      rotationParameters = nextRotationParameters))))
@@ -405,8 +413,8 @@ case class Bacterium(id: Int, location: Point,
               // Safeguards
               if (thisEnvironment.within(newLocation))
                 (thisEnvironment, IndexedSeq(Some(thisBacterium.copy(location = newLocation,
-                                                                     angle = verify(newAngle, _angle),
-                                                                     initialSpeed = verify(newSpeed, speed),
+                                                                     orientation = isFiniteOrDefault(newAngle, _orientation),
+                                                                     initialSpeed = isFiniteOrDefault(newSpeed, speed),
                                                                      hunger = newHunger,
                                                                      environment = thisEnvironment,
                                                                      rotationParameters = nextRotationParameters))))
@@ -421,13 +429,13 @@ case class Bacterium(id: Int, location: Point,
     val limitingAngle = if (rotated_?) PiTimes2 else Pi + 2 * offsetAngle
     val sectorSweep = limitingAngle / (flagella + (if (rotated_?) 0 else 1))
     //noinspection ScalaUnnecessaryParentheses
-    val startingAngle = _angle + PiBy2 + (if (rotated_?) 0.0 else sectorSweep) +
-                        (if (rotated_?) (_angle - this.previousAngle) else -offsetAngle)
+    val startingAngle = _orientation + PiBy2 + (if (rotated_?) 0.0 else sectorSweep) +
+                        (if (rotated_?) (_orientation - this.previousOrientation) else -offsetAngle)
     //@formatter:off
     IndexedSeq.tabulate(flagella) { flagellumIndex => {
       val offset = flagellumIndex * sectorSweep
       val flagellumAngle = (startingAngle + offset) % PiTimes2
-      val relativeAngle = flagellumAngle - _angle
+      val relativeAngle = flagellumAngle - _orientation
       val surfaceOffset = (radiusX * math.cos(relativeAngle), radiusY * math.sin(relativeAngle)).norm
       location + Vector2D.fromMagnitudeAndAngle(flagellumLength + surfaceOffset, flagellumAngle)
     }}
@@ -445,8 +453,8 @@ case class Bacterium(id: Int, location: Point,
                                               otherBacterium.overlaps(thisBacterium) ||
                                               thisBacterium.intersects(otherBacterium))) {
         log(s"Handling collision at ($x, $y) between bacteria id ${thisBacterium.id} & ${otherBacterium.id}")
-        val u1 = Vector2D.fromMagnitudeAndAngle(thisBacterium.speed, thisBacterium._angle)
-        val u2 = Vector2D.fromMagnitudeAndAngle(otherBacterium.speed, otherBacterium._angle)
+        val u1 = Vector2D.fromMagnitudeAndAngle(thisBacterium.speed, thisBacterium._orientation)
+        val u2 = Vector2D.fromMagnitudeAndAngle(otherBacterium.speed, otherBacterium._orientation)
         val (u_rel, r_rel) = (u1 - u2, thisBacterium.location - otherBacterium.location)
         val n_r_rel = -r_rel
         val (m1, m2) = (thisBacterium.mass, otherBacterium.mass)
@@ -460,10 +468,10 @@ case class Bacterium(id: Int, location: Point,
         val (theirSpeed, theirAngle) = (coefficientOfRestitution * v2.norm, v2.angle)
         // Handle hybridisation
         val (bacterium1, bacterium2) =
-          (thisBacterium.copy(angle = verify(ourAngle, thisBacterium._angle),
-                              initialSpeed = verify(ourSpeed, thisBacterium.speed)),
-            otherBacterium.copy(angle = verify(theirAngle, otherBacterium._angle),
-                                initialSpeed = verify(theirSpeed, otherBacterium.speed)))
+          (thisBacterium.copy(orientation = isFiniteOrDefault(ourAngle, thisBacterium._orientation),
+                              initialSpeed = isFiniteOrDefault(ourSpeed, thisBacterium.speed)),
+            otherBacterium.copy(orientation = isFiniteOrDefault(theirAngle, otherBacterium._orientation),
+                                initialSpeed = isFiniteOrDefault(theirSpeed, otherBacterium.speed)))
         hybridize(bacterium1, bacterium2) match {
           case Some((newBacterium1, newBacterium2)) =>
             thisBacterium = newBacterium1
@@ -488,7 +496,7 @@ case class Bacterium(id: Int, location: Point,
   lazy val baseShape: Ellipse =
   //@formatter:off
     BuilderStyle.build(new Ellipse(x, y, radiusX, radiusY)) { baseShape => {
-      baseShape.getTransforms.add(new Rotate(math.toDegrees(_angle), x, y))
+      baseShape.getTransforms.add(new Rotate(math.toDegrees(_orientation), x, y))
       baseShape.setFill(visiblePaint)
       baseShape.setStroke(Color.BLACK)
     }}
@@ -565,7 +573,7 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
 
   object TumbleProbabilityFunction extends Enumeration {
     type TumbleProbabilityFunction = Value
-    val TrueGaussian, IntelligentGaussian, SimpleGaussian = Value
+    val TrueGaussian, SimpleGaussian, OverallSigmoid, TargetedSigmoid = Value
   }
 
   object FoodSourceScoringFunction {
@@ -649,8 +657,8 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
   private def randomAngle = rng.nextDouble(PiTimes2)
 
   private def randomHungerIncrement(scales: Scales, initialSpeed: Double): Double = {
-    val verifiedInitialSpeed = verify(initialSpeed, randomSpeed)
-    verify(scales.hungerScale, Defaults.scales.hungerScale) *
+    val verifiedInitialSpeed = isFiniteOrDefault(initialSpeed, randomSpeed)
+    isFiniteOrDefault(scales.hungerScale, Defaults.scales.hungerScale) *
     rng.nextDouble((verifiedInitialSpeed + (if (verifiedInitialSpeed == Defaults.minSpeed) 1.0 else 0.0) - Defaults.minSpeed) / Defaults.maxSpeedDelta)
   }
 
@@ -679,7 +687,8 @@ object Bacterium extends UIProxy[Bacterium] with Ordering[Bacterium] {
                                                  Defaults.hybridizationLimitingHunger,
                                                  scales.massScale, scales.forceScale, scales.areaScale,
                                                  Defaults.scoringFunction,
-                                                 randomTumbleProbabilityFunction,
+                                                 TumbleProbabilityFunction.OverallSigmoid,
+                                                 //randomTumbleProbabilityFunction,
                                                  Defaults.limitingProbabilities,
                                                  Defaults.unTumbleThreshold,
                                                  /*

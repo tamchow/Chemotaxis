@@ -28,7 +28,7 @@ import scala.collection.mutable.ArrayBuffer
 /**
   * Encapsulates the UI of the simulation
   */
-class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Double) {
+class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Double, useDynamicFrameTime: Boolean = false) {
 
   import View._
 
@@ -134,7 +134,7 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
     }).start()
   }
 
-  def toSerializableString: Seq[String] = ???
+  def toSerializableString: Seq[String] = Seq(toString) //TODO: Implement Properly
 
   def restoreState(stage: Stage): AnimationTimer = {
     val restoreFile = showFileChooserDialog("Choose the session database file to restore from",
@@ -149,21 +149,22 @@ class View(providedStage: Stage, restartHandler: Stage => Unit, providedFPS: Dou
 
   def simulationRunner(stage: Stage): AnimationTimer = {
     _frames = 0
-    val animationTimer = new AnimationTimer() {
+    val animationTimer: AnimationTimer = new AnimationTimer() {
       //noinspection ScalaUnusedSymbol
       private var (deadDialogShowing_?, stoppedDialogShowing_?) = (false, false)
       private var lastUpdate = 0L
 
       override def handle(now: Long): Unit = {
-        val frameTime = 1.0 / fps
-        if (now - lastUpdate >= (frameTime * 1E9).toLong) {
+        val currentFPS = 1.0E9 / (now - lastUpdate)
+        val frameTime = 1.0 / (if(useDynamicFrameTime) currentFPS else fps)
+        if (now - lastUpdate >= (1E9 / fps).toLong) {
           canvas.getGraphicsContext2D.clearRect(0, 0, stage.getWidth, stage.getHeight)
           val plateStatistics = current.statistics
 
           import plateStatistics._
 
           val fpsText = s"FPS: (real = " +
-                        s"${"%.2f".format(1E9 / (now - lastUpdate))}, " +
+                        s"${"%.2f".format(currentFPS)}, " +
                         s"ideal = $fps), " +
                         s"frame $frames (of ${history.length} total)"
           val spawnText = s"$spawnedBacteria " +

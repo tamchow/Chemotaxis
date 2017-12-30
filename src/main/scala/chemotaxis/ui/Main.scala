@@ -32,13 +32,19 @@ class Main extends Application {
     stage.setTitle("Chemotaxis simulation")
     stage.setFullScreenExitHint("")
     stage.setMaximized(true)
-    val args = getParameters.getRaw.asScala
-    val fps = if (args.length >= 3) args.lastOption.map(_.toDouble).getOrElse(20.0) else 20.0
-    val view = new View(stage, restart, fps)
+    val args = getParameters.getNamed.asScala
+    val fps = args.get("fps").map(_.toDouble).getOrElse(20.0)
+    val dynamicFrameTime = args.contains("dyn")
+    val view = new View(stage, restart, fps, dynamicFrameTime)
     val (sceneBounds, rootPane) = view.initializeDisplay
     val scene = new javafx.scene.Scene(rootPane, sceneBounds.getWidth, sceneBounds.getHeight)
+    // Command-line named arguments:
+    // fps : Ideal/Desired FPS, default 20
+    // fs : # food sources to be spawned, default ranged random
+    // bs : # bacteria to be spawned, default ranged random
+    // dyn : enable dynamic frame time, default false, switch
     //noinspection ZeroIndexToHead
-    view.initializeState(Try(args(0).toInt).toOption, Try(args(1).toInt).toOption)
+    view.initializeState(args.get("fs").map(_.toInt), args.get("bs").map(_.toInt))
     var animationTimer = view.simulationRunner(stage)
 
     def handleEventControllingAnimation(action: => Unit) {

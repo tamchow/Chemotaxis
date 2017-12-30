@@ -2,7 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/modules/chemotaxissimulator.iml" filepath="$PROJECT_DIR$/.idea/modules/chemotaxissimulator.iml" />
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/ChemotaxisSimulator.iml" filepath="$PROJECT_DIR$/.idea/modules/ChemotaxisSimulator.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/chemotaxissimulator-build.iml" filepath="$PROJECT_DIR$/.idea/modules/chemotaxissimulator-build.iml" />
     </modules>
   </component>

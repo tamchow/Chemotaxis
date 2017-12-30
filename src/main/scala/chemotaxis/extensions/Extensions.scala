@@ -356,7 +356,7 @@ object MathUtilities {
     val MinValue: Double = Double.MinValue
   }
 
-  @inline def verify(valueToCheck: => Double, default: => Double): Double =
+  @inline def isFiniteOrDefault(valueToCheck: => Double, default: => Double): Double =
     if (valueToCheck.isNaN || valueToCheck.isInfinite) default else valueToCheck
 
   @inline def clamp[T](min: T, max: T)(value: T)
@@ -387,6 +387,8 @@ object MathUtilities {
 
   def gaussian(mean: Double, deviation: Double): Double => Double =
     x => math.exp(-((x - mean) / deviation).squared / 2.0) / (Sqrt2Pi * deviation)
+
+  def sigmoid(x: Double): Double = 1 / 1 + math.exp(-x)
 
   /**
     * Approximates the normal error function by the Bürmann series

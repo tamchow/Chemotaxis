@@ -27,12 +27,12 @@ trait FoodLike extends CircularBiologicalRestrictedShape {
 
   def consumed(hunger: Double): FoodLike
 
-  val _maxAmount: Double = calcMaxAmount(verify(maxAmount, environment.innerRadius))
+  val _maxAmount: Double = calcMaxAmount(isFiniteOrDefault(maxAmount, environment.innerRadius))
 
   private lazy val (randomAmount, randomToxicity) = FoodSource.randomAmountAndToxicity()
 
-  val toxicityRatio: Double = clampNormalized(verify(toxicity, randomToxicity))
-  val amountRatio: Double = clampNormalized(verify(amount, randomAmount))
+  val toxicityRatio: Double = clampNormalized(isFiniteOrDefault(toxicity, randomToxicity))
+  val amountRatio: Double = clampNormalized(isFiniteOrDefault(amount, randomAmount))
   val _amount: Double = calcAmount(amountRatio, _maxAmount)
   val _toxicity: Double = calcAmount(toxicityRatio, _maxAmount)
 
@@ -40,11 +40,11 @@ trait FoodLike extends CircularBiologicalRestrictedShape {
 
   val scales: Scales = Scales()
   val viscosity: Double =
-    clampNatural(verify(scales.viscosityScale, FoodSource.Defaults.viscosityScale)) *
-    verify(environment.viscosity, Environment.agarViscositySI)
+    clampNatural(isFiniteOrDefault(scales.viscosityScale, FoodSource.Defaults.viscosityScale)) *
+    isFiniteOrDefault(environment.viscosity, Environment.agarViscositySI)
   val nutrientToToxicityRatio: Double = amountRatio / toxicityRatio
 
-  private def controlledHunger(hunger: Double) = clampNormalized(verify(hunger, Bacterium.Defaults.initialHunger))
+  private def controlledHunger(hunger: Double) = clampNormalized(isFiniteOrDefault(hunger, Bacterium.Defaults.initialHunger))
 
   def calcAmountAfterConsumption(hunger: Double): Double = amountRatio * coNormalizedLogisticFunction(controlledHunger(hunger))
 

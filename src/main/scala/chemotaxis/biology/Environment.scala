@@ -54,9 +54,9 @@ case class Environment(width: Double, height: Double, center: Point,
 
   val diameter: Double = width min height
   val radius: Double = (diameter / 2).toInt
-  val viscosity: Double = clampNonNegative(verify(parameters.mediumViscosity, Defaults.viscosity))
-  val viscosityIncrement: Double = clampNonNegative(verify(parameters.mediumViscosityIncrement, Defaults.viscosityIncrement))
-  private val borderWidth = clampNormalized(verify(parameters.borderFactor, Defaults.borderFactor)) * diameter
+  val viscosity: Double = clampNonNegative(isFiniteOrDefault(parameters.mediumViscosity, Defaults.viscosity))
+  val viscosityIncrement: Double = clampNonNegative(isFiniteOrDefault(parameters.mediumViscosityIncrement, Defaults.viscosityIncrement))
+  private val borderWidth = clampNormalized(isFiniteOrDefault(parameters.borderFactor, Defaults.borderFactor)) * diameter
   val innerDiameter: Double = diameter - borderWidth
   val innerRadius: Double = (innerDiameter / 2).toInt
   val safeWidth, safeHeight = innerDiameter
